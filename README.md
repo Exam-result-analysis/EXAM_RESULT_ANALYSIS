@@ -1,2 +1,2 @@
 # EXAM_RESULT_ANALYSIS
-Project for Data Science OE 
+Project for Data Science OE Course
