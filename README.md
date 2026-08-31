@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Exam Result Analysis System (Backend REST API)
 
 A robust, production-grade REST API backend for Exam Result Analysis built with **Node.js**, **Express**, **SQLite** (`better-sqlite3`), and **JWT Authentication**.
@@ -84,3 +85,7 @@ npm test
 
 ### Healthcheck
 - `GET /health` — Service status check
+=======
+# EXAM_RESULT_ANALYSIS
+Project for Data Science Open Elective Course
+>>>>>>> 4a6fc1a5e9dca106983310988c9f7ced8f609b35
