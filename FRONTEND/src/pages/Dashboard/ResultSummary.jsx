@@ -1,0 +1,3 @@
+import { Card } from '../../components/ui'
+const results = [['Pass', '2,054', '82.6%', '#22a06b', 'Students cleared all subjects'], ['Fail', '248', '10.0%', '#e25353', 'Students requiring improvement'], ['Arrear', '184', '7.4%', '#e8a22b', 'Students with pending subjects']]
+export default function ResultSummary() { return <Card title="Result overview" className="result-overview"><div className="result-list">{results.map(([name, count, percent, color, description]) => <article className="result-item" key={name}><div className="result-ring" style={{ '--ring-color': color, '--ring-value': `${Number(percent.replace('%', '')) * 3.6}deg` }}><span>{percent}</span></div><div><h3>{name}</h3><strong>{count} students</strong><p>{description}</p></div></article>)}</div></Card> }
