@@ -1,3 +1,12 @@
-export default function Card({ children, className = '', title, action }) {
-  return <section className={`ui-card ${className}`.trim()}>{(title || action) && <header className="ui-card__header">{title && <h2>{title}</h2>}{action}</header>}{children}</section>
-}
+
+const Card = ({ children, className = "" }) => {
+  return (
+    <div
+      className={`rounded-xl border border-slate-200 bg-white shadow-sm ${className}`}
+    >
+      {children}
+    </div>
+  );
+};
+
+export default Card;
