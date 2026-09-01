@@ -1,4 +1,71 @@
-import { Card } from '../../components/ui'
-const data = [72, 75, 77, 74, 79, 82, 80, 83, 82.6]
-const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']
-export default function OverallPassChart() { const points = data.map((value, index) => `${index * 45},${142 - ((value - 68) * 6)}`).join(' '); return <Card title="Overall pass percentage" className="pass-chart-card" action={<button className="text-button">View report →</button>}><div className="chart-summary"><strong>82.6%</strong><span className="positive">↑ 3.4%</span><small>vs. previous session</small></div><div className="line-chart" role="img" aria-label="Pass percentage trend from January to September"><div className="chart-grid"><i /><i /><i /><i /></div><svg viewBox="0 0 360 150" preserveAspectRatio="none"><defs><linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1"><stop stopColor="#5267e8" stopOpacity=".18" /><stop offset="1" stopColor="#5267e8" stopOpacity="0" /></linearGradient></defs><polygon points={`0,150 ${points} 360,150`} fill="url(#chartFill)" /><polyline points={points} fill="none" stroke="#5267e8" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />{data.map((value, index) => <circle key={labels[index]} cx={index * 45} cy={142 - ((value - 68) * 6)} r="3.5" fill="white" stroke="#5267e8" strokeWidth="2" />)}</svg></div><div className="chart-labels">{labels.map((label) => <span key={label}>{label}</span>)}</div></Card> }
+import React from 'react'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
+
+export default function OverallPassChart({ overall = {} }) {
+  const passed = Number(overall.total_passed || 0)
+  const failed = Number(overall.total_failed || 0)
+  const passPercentage = Number(overall.overall_pass_percentage || 0)
+
+  const data = [
+    { name: 'Passed', value: passed, color: '#10B981' },
+    { name: 'Failed', value: failed, color: '#F43F5E' },
+  ]
+
+  const total = passed + failed
+
+  return (
+    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-xs flex flex-col justify-between">
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-base font-bold text-gray-900">Overall Pass Distribution</h3>
+          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            {passPercentage}% Pass Rate
+          </span>
+        </div>
+        <p className="text-xs text-gray-500">Evaluation outcome across all enrolled records</p>
+      </div>
+
+      <div className="h-64 relative my-2">
+        {total === 0 ? (
+          <div className="h-full flex items-center justify-center text-xs text-gray-400">
+            No exam records match current filters
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data}
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={85}
+                paddingAngle={4}
+                dataKey="value"
+              >
+                {data.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip
+                formatter={(val) => [`${val} results`, '']}
+                contentStyle={{ borderRadius: '8px', fontSize: '12px' }}
+              />
+              <Legend verticalAlign="bottom" height={36} iconType="circle" />
+            </PieChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 pt-4 border-t border-gray-100 text-center">
+        <div className="p-2 rounded-lg bg-emerald-50/50 border border-emerald-100">
+          <p className="text-xs text-emerald-800 font-semibold">Total Passed</p>
+          <p className="text-lg font-bold text-emerald-700">{passed.toLocaleString()}</p>
+        </div>
+        <div className="p-2 rounded-lg bg-rose-50/50 border border-rose-100">
+          <p className="text-xs text-rose-800 font-semibold">Total Failed</p>
+          <p className="text-lg font-bold text-rose-700">{failed.toLocaleString()}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
