@@ -1,16 +1,26 @@
-# React + Vite
+# Landing Dashboard — Backup Branch
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+> **Branch:** `feature/landing-dashboard`
 
-Currently, two official plugins are available:
+This branch is maintained as a **backup/reference branch** for the Landing Dashboard implementation.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+### Purpose
 
-## React Compiler
+* Stores the Landing Dashboard implementation safely.
+* Acts as a backup of the Landing Dashboard commit.
+* Can be used for reference or recovery if required.
+* This branch is **not the primary development branch**.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Main Development Branch
 
-## Expanding the ESLint configuration
+The primary development work is maintained in:
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```text
+develop
+```
+
+Any future changes intended for the main project should be made through the appropriate development workflow and merged into `develop`.
+
+### Note
+
+Please avoid making unrelated changes directly on this branch. It is primarily preserved as a backup of the Landing Dashboard work.
