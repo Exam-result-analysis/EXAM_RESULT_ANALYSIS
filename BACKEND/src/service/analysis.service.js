@@ -3,161 +3,170 @@ const { query } = require('../config/database');
 const ApiError = require('../utils/apiError');
 
 /**
- * Helper to build dynamic filter clauses
+ * Helper to build dynamic filter clauses for the 3NF schema
  */
 const addFilter = (filters, values, expression, value) => {
-  if (value !== undefined && value !== null && value !== '') {
+  if (value !== undefined && value !== null && value !== '' && value !== 'all') {
     values.push(value);
     filters.push(`${expression} = ?`);
   }
 };
 
 const buildFilters = (options = {}) => {
-  const filters = ["r.result_status <> 'CANCELLED'"];
+  const filters = ["er.status_code NOT IN ('CAN', 'CANCELLED')"];
   const values = [];
 
-  const academicYear = options.academic_year || options.academicYear;
-  const semester = options.semester;
-  const sessionId = options.session_id || options.sessionId;
-  const departmentId = options.department_id || options.departmentId;
-  const courseId = options.course_id || options.courseId;
-  const subjectId = options.subject_id || options.subjectId;
-  const studentId = options.student_id || options.studentId;
+  const currSems = options.curr_sems ?? options.semester ?? options.currSems;
+  const degreeCode = options.degree_code ?? options.degreeCode ?? options.course_id ?? options.department_id;
+  const uniCode = options.university_code ?? options.universityCode ?? options.university;
+  const typeCode = options.type_code ?? options.typeCode;
+  const deliveryMode = options.delivery_mode ?? options.deliveryMode ?? (options.mode === 'ONLINE' || options.mode === 'OFFLINE' ? options.mode : undefined);
+  const subjectCode = options.subject_code ?? options.subjectCode ?? options.subject_id;
+  const regnNumb = options.regn_numb ?? options.regnNumb ?? options.student_id;
 
-  addFilter(filters, values, 'a.academic_year', academicYear);
-  addFilter(filters, values, 'a.semester', semester);
-  addFilter(filters, values, 'e.session_id', sessionId);
-  addFilter(filters, values, 's.department_id', departmentId);
-  addFilter(filters, values, 's.course_id', courseId);
-  addFilter(filters, values, 'r.subject_id', subjectId);
-  addFilter(filters, values, 'r.student_id', studentId);
+  addFilter(filters, values, 'er.curr_sems', currSems);
+  addFilter(filters, values, 'er.degree_code', degreeCode);
+  addFilter(filters, values, 'd.university_code', uniCode);
+  addFilter(filters, values, 'd.delivery_mode', deliveryMode);
+  addFilter(filters, values, 'er.type_code', typeCode);
+  addFilter(filters, values, 'er.subject_code', subjectCode);
+  addFilter(filters, values, 'er.regn_numb', regnNumb);
 
   return { where: `WHERE ${filters.join(' AND ')}`, values };
 };
 
 const commonJoins = `
-  FROM result r
-  JOIN student s ON s.student_id = r.student_id
-  JOIN exam e ON e.exam_id = r.exam_id
-  JOIN academic_session a ON a.session_id = e.session_id`;
+  FROM exam_results er
+  JOIN students s ON s.regn_numb = er.regn_numb
+  JOIN degrees d ON d.degree_code = er.degree_code
+  JOIN universities u ON u.university_code = d.university_code
+  JOIN subjects sub ON sub.subject_code = er.subject_code
+  LEFT JOIN exam_types et ON et.type_code = er.type_code`;
 
 // 1. Overall pass percentage API
 const overall = async (options = {}) => {
   const { where, values } = buildFilters(options);
   const result = await query(
     `SELECT
-       COUNT(DISTINCT s.student_id)      AS total_students,
-       COUNT(DISTINCT d.department_id)   AS total_departments,
-       COUNT(DISTINCT c.course_id)       AS total_courses,
-       COUNT(DISTINCT sub.subject_id)    AS total_subjects,
-       COUNT(CASE WHEN r.result_status = 'PASS' THEN 1 END) AS total_passed,
-       COUNT(CASE WHEN r.result_status = 'FAIL' THEN 1 END) AS total_failed,
-       COALESCE(ROUND(100.0 * COUNT(CASE WHEN r.result_status = 'PASS' THEN 1 END) /
-         NULLIF(COUNT(CASE WHEN r.result_status IN ('PASS', 'FAIL') THEN 1 END), 0), 2), 0)
+       COUNT(DISTINCT er.regn_numb)      AS total_students,
+       COUNT(DISTINCT u.university_code) AS total_universities,
+       COUNT(DISTINCT d.degree_code)     AS total_departments,
+       COUNT(DISTINCT d.degree_code)     AS total_courses,
+       COUNT(DISTINCT d.degree_code)     AS total_degrees,
+       COUNT(DISTINCT sub.subject_code)  AS total_subjects,
+       COUNT(er.result_id)               AS total_evaluations,
+       COUNT(CASE WHEN er.status_code IN ('PASS', 'P') THEN 1 END) AS total_passed,
+       COUNT(CASE WHEN er.status_code IN ('FAIL', 'F') THEN 1 END) AS total_failed,
+       COALESCE(ROUND(100.0 * COUNT(CASE WHEN er.status_code IN ('PASS', 'P') THEN 1 END) /
+         NULLIF(COUNT(CASE WHEN er.status_code IN ('PASS', 'P', 'FAIL', 'F') THEN 1 END), 0), 2), 0)
          AS overall_pass_percentage
      ${commonJoins}
-     JOIN subject sub ON sub.subject_id = r.subject_id
-     JOIN course c ON c.course_id = sub.course_id
-     JOIN department d ON d.department_id = c.department_id
      ${where}`,
     values
   );
   return result.rows[0] || {
     total_students: 0,
+    total_universities: 0,
     total_departments: 0,
     total_courses: 0,
+    total_degrees: 0,
     total_subjects: 0,
+    total_evaluations: 0,
     total_passed: 0,
     total_failed: 0,
     overall_pass_percentage: 0,
   };
 };
 
-// 2. Department-wise analysis API
+// 2. Department / Degree ranking analysis API
 const department = async (options = {}) => {
   const { where, values } = buildFilters(options);
   const result = await query(
     `SELECT
-       d.department_id,
-       d.department_name,
-       COUNT(DISTINCT s.student_id) AS total_students,
-       COUNT(DISTINCT CASE WHEN r.result_status = 'PASS' THEN s.student_id END) AS passed_students,
-       COUNT(DISTINCT CASE WHEN r.result_status = 'FAIL' THEN s.student_id END) AS failed_students,
-       COALESCE(ROUND(100.0 * COUNT(CASE WHEN r.result_status = 'PASS' THEN 1 END) /
-         NULLIF(COUNT(CASE WHEN r.result_status IN ('PASS', 'FAIL') THEN 1 END), 0), 2), 0)
+       d.degree_code                     AS department_id,
+       d.degree_code                     AS degree_code,
+       d.degree_name                     AS department_name,
+       d.degree_name                     AS degree_name,
+       u.university_code,
+       u.university_name,
+       COUNT(DISTINCT er.regn_numb)      AS total_students,
+       COUNT(DISTINCT CASE WHEN er.status_code IN ('PASS', 'P') THEN er.regn_numb END) AS passed_students,
+       COUNT(DISTINCT CASE WHEN er.status_code IN ('FAIL', 'F') THEN er.regn_numb END) AS failed_students,
+       COALESCE(ROUND(100.0 * COUNT(CASE WHEN er.status_code IN ('PASS', 'P') THEN 1 END) /
+         NULLIF(COUNT(CASE WHEN er.status_code IN ('PASS', 'P', 'FAIL', 'F') THEN 1 END), 0), 2), 0)
          AS pass_percentage
      ${commonJoins}
-     JOIN department d ON d.department_id = s.department_id
      ${where}
-     GROUP BY d.department_id, d.department_name
-     ORDER BY pass_percentage DESC, d.department_name`,
+     GROUP BY d.degree_code, d.degree_name, u.university_code, u.university_name
+     ORDER BY pass_percentage DESC, d.degree_name`,
     values
   );
   return result.rows;
 };
 
-// 3. Course-wise analysis API
+// 3. Course / Degree performance breakdown API
 const course = async (options = {}) => {
   const { where, values } = buildFilters(options);
   const result = await query(
     `SELECT
-       c.course_id,
-       c.course_name,
-       d.department_name,
-       COUNT(DISTINCT s.student_id) AS total_students,
-       COUNT(DISTINCT CASE WHEN r.result_status = 'PASS' THEN s.student_id END) AS passed_students,
-       COUNT(DISTINCT CASE WHEN r.result_status = 'FAIL' THEN s.student_id END) AS failed_students,
-       COALESCE(ROUND(100.0 * COUNT(CASE WHEN r.result_status = 'PASS' THEN 1 END) /
-         NULLIF(COUNT(CASE WHEN r.result_status IN ('PASS', 'FAIL') THEN 1 END), 0), 2), 0)
+       d.degree_code                     AS course_id,
+       d.degree_code                     AS degree_code,
+       d.degree_name                     AS course_name,
+       d.degree_name                     AS degree_name,
+       u.university_name                 AS department_name,
+       COUNT(DISTINCT er.regn_numb)      AS total_students,
+       COUNT(DISTINCT CASE WHEN er.status_code IN ('PASS', 'P') THEN er.regn_numb END) AS passed_students,
+       COUNT(DISTINCT CASE WHEN er.status_code IN ('FAIL', 'F') THEN er.regn_numb END) AS failed_students,
+       COALESCE(ROUND(100.0 * COUNT(CASE WHEN er.status_code IN ('PASS', 'P') THEN 1 END) /
+         NULLIF(COUNT(CASE WHEN er.status_code IN ('PASS', 'P', 'FAIL', 'F') THEN 1 END), 0), 2), 0)
          AS pass_percentage
      ${commonJoins}
-     JOIN course c ON c.course_id = s.course_id
-     JOIN department d ON d.department_id = c.department_id
      ${where}
-     GROUP BY c.course_id, c.course_name, d.department_name
-     ORDER BY pass_percentage DESC, c.course_name`,
+     GROUP BY d.degree_code, d.degree_name, u.university_name
+     ORDER BY pass_percentage DESC, d.degree_name`,
     values
   );
   return result.rows;
 };
 
-// 4. Session-wise trend analysis API
+// 4. Session / Semester-wise trend analysis API
 const session = async (options = {}) => {
   const { where, values } = buildFilters(options);
   const result = await query(
     `SELECT
-       a.academic_year,
-       a.semester,
-       COUNT(DISTINCT r.student_id) AS total_students,
-       COALESCE(ROUND(100.0 * COUNT(CASE WHEN r.result_status = 'PASS' THEN 1 END) /
-         NULLIF(COUNT(CASE WHEN r.result_status IN ('PASS', 'FAIL') THEN 1 END), 0), 2), 0)
+       '2023-24'                         AS academic_year,
+       er.curr_sems                      AS semester,
+       er.curr_sems                      AS curr_sems,
+       COUNT(DISTINCT er.regn_numb)      AS total_students,
+       COALESCE(ROUND(100.0 * COUNT(CASE WHEN er.status_code IN ('PASS', 'P') THEN 1 END) /
+         NULLIF(COUNT(CASE WHEN er.status_code IN ('PASS', 'P', 'FAIL', 'F') THEN 1 END), 0), 2), 0)
          AS pass_percentage
      ${commonJoins}
      ${where}
-     GROUP BY a.academic_year, a.semester
-     ORDER BY a.academic_year, a.semester`,
+     GROUP BY er.curr_sems
+     ORDER BY er.curr_sems`,
     values
   );
   return result.rows;
 };
 
-// 5. Mode-wise (Online vs Offline) analysis API
+// 5. Mode / Exam Type (Continuous Test vs End Sem) analysis API
 const mode = async (options = {}) => {
   const { where, values } = buildFilters(options);
   const result = await query(
     `SELECT
-       m.mode_name,
-       COUNT(DISTINCT r.student_id) AS total_students,
-       COUNT(CASE WHEN r.result_status = 'PASS' THEN 1 END) AS passed_students,
-       COUNT(CASE WHEN r.result_status = 'FAIL' THEN 1 END) AS failed_students,
-       COALESCE(ROUND(100.0 * COUNT(CASE WHEN r.result_status = 'PASS' THEN 1 END) /
-         NULLIF(COUNT(CASE WHEN r.result_status IN ('PASS', 'FAIL') THEN 1 END), 0), 2), 0)
+       er.type_code,
+       COALESCE(et.description, er.type_code) AS mode_name,
+       COUNT(DISTINCT er.regn_numb)      AS total_students,
+       COUNT(CASE WHEN er.status_code IN ('PASS', 'P') THEN 1 END) AS passed_students,
+       COUNT(CASE WHEN er.status_code IN ('FAIL', 'F') THEN 1 END) AS failed_students,
+       COALESCE(ROUND(100.0 * COUNT(CASE WHEN er.status_code IN ('PASS', 'P') THEN 1 END) /
+         NULLIF(COUNT(CASE WHEN er.status_code IN ('PASS', 'P', 'FAIL', 'F') THEN 1 END), 0), 2), 0)
          AS pass_percentage
      ${commonJoins}
-     JOIN examination_mode m ON m.mode_id = e.mode_id
      ${where}
-     GROUP BY m.mode_name
-     ORDER BY m.mode_name`,
+     GROUP BY er.type_code, et.description
+     ORDER BY er.type_code`,
     values
   );
   return result.rows;
@@ -168,19 +177,20 @@ const subject = async (options = {}) => {
   const { where, values } = buildFilters(options);
   const result = await query(
     `SELECT
-       sub.subject_id,
-       sub.subject_name,
-       COUNT(r.result_id) AS total_appeared,
-       ROUND(AVG(r.total_marks), 2) AS average_marks,
-       MAX(r.total_marks) AS highest_marks,
-       MIN(r.total_marks) AS lowest_marks,
-       COALESCE(ROUND(100.0 * COUNT(CASE WHEN r.result_status = 'PASS' THEN 1 END) /
-         NULLIF(COUNT(CASE WHEN r.result_status IN ('PASS', 'FAIL') THEN 1 END), 0), 2), 0)
+       sub.subject_code                  AS subject_id,
+       sub.subject_code                  AS subject_code,
+       sub.subject_uncode                AS subject_uncode,
+       sub.subject_name                  AS subject_name,
+       COUNT(er.result_id)               AS total_appeared,
+       ROUND(AVG(er.total_mark), 2)      AS average_marks,
+       MAX(er.total_mark)                AS highest_marks,
+       MIN(er.total_mark)                AS lowest_marks,
+       COALESCE(ROUND(100.0 * COUNT(CASE WHEN er.status_code IN ('PASS', 'P') THEN 1 END) /
+         NULLIF(COUNT(CASE WHEN er.status_code IN ('PASS', 'P', 'FAIL', 'F') THEN 1 END), 0), 2), 0)
          AS pass_percentage
      ${commonJoins}
-     JOIN subject sub ON sub.subject_id = r.subject_id
      ${where}
-     GROUP BY sub.subject_id, sub.subject_name
+     GROUP BY sub.subject_code, sub.subject_uncode, sub.subject_name
      ORDER BY pass_percentage DESC, sub.subject_name`,
     values
   );
@@ -189,62 +199,159 @@ const subject = async (options = {}) => {
 
 // 7. Student drill-down statistics API
 const student = async (options = {}) => {
-  const studentId = options.student_id || options.studentId;
-  if (!studentId) {
-    throw new ApiError(400, 'student_id is required');
+  const regnNumb = options.regn_numb || options.student_id || options.studentId;
+  if (!regnNumb) {
+    throw new ApiError(400, 'regn_numb or student_id is required');
   }
 
-  const { where, values } = buildFilters(options);
-
   const studentDetails = await query(
-    `SELECT s.student_id, s.student_name, c.course_name, d.department_name, s.admission_year, s.gender, s.status
-     FROM student s
-     JOIN course c ON c.course_id = s.course_id
-     JOIN department d ON d.department_id = s.department_id
-     WHERE s.student_id = ?`,
-    [studentId]
+    `SELECT
+       s.regn_numb,
+       s.regn_numb                       AS student_id,
+       ('Candidate ' || s.regn_numb)     AS student_name,
+       d.degree_code,
+       d.degree_name,
+       d.degree_name                     AS course_name,
+       u.university_code,
+       u.university_name,
+       u.university_name                 AS department_name,
+       2023                              AS admission_year
+     FROM students s
+     JOIN degrees d ON d.degree_code = s.degree_code
+     JOIN universities u ON u.university_code = d.university_code
+     WHERE s.regn_numb = ?`,
+    [regnNumb]
   );
 
   if (!studentDetails.rowCount) {
-    throw new ApiError(404, 'Student not found');
+    throw new ApiError(404, `Student with Register Number ${regnNumb} not found`);
   }
 
   const results = await query(
     `SELECT
-       sub.subject_id,
+       sub.subject_code,
+       sub.subject_code                  AS subject_id,
+       sub.subject_uncode,
        sub.subject_name,
-       sub.semester_number,
-       a.academic_year,
-       r.internal_marks,
-       r.external_marks,
-       r.total_marks,
-       r.grade,
-       r.result_status
+       er.curr_sems                      AS semester_number,
+       '2023-24'                         AS academic_year,
+       er.internal_mark                  AS internal_marks,
+       er.external_mark                  AS external_marks,
+       er.total_mark                     AS total_marks,
+       er.grade,
+       er.status_code                    AS result_status,
+       er.type_code
      ${commonJoins}
-     JOIN subject sub ON sub.subject_id = r.subject_id
-     ${where}
-     ORDER BY sub.semester_number, sub.subject_name`,
-    values
+     WHERE er.regn_numb = ?
+     ORDER BY er.curr_sems, sub.subject_name`,
+    [regnNumb]
   );
 
   const summary = await query(
     `SELECT
-       COUNT(r.result_id) AS total_subjects,
-       COUNT(CASE WHEN r.result_status = 'PASS' THEN 1 END) AS passed_subjects,
-       COUNT(CASE WHEN r.result_status = 'FAIL' THEN 1 END) AS failed_subjects,
-       COUNT(CASE WHEN r.result_status = 'CANCELLED' THEN 1 END) AS cancelled_subjects,
-       ROUND(AVG(r.total_marks), 2) AS average_marks,
-       COALESCE(ROUND(100.0 * COUNT(CASE WHEN r.result_status = 'PASS' THEN 1 END) /
-         NULLIF(COUNT(CASE WHEN r.result_status IN ('PASS', 'FAIL') THEN 1 END), 0), 2), 0) AS pass_percentage
-     FROM result r
-     WHERE r.student_id = ?`,
-    [studentId]
+       COUNT(er.result_id)               AS total_subjects,
+       COUNT(CASE WHEN er.status_code IN ('PASS', 'P') THEN 1 END) AS passed_subjects,
+       COUNT(CASE WHEN er.status_code IN ('FAIL', 'F') THEN 1 END) AS failed_subjects,
+       COUNT(CASE WHEN er.status_code IN ('CAN', 'CANCELLED') THEN 1 END) AS cancelled_subjects,
+       ROUND(AVG(er.total_mark), 2)      AS average_marks,
+       COALESCE(ROUND(100.0 * COUNT(CASE WHEN er.status_code IN ('PASS', 'P') THEN 1 END) /
+         NULLIF(COUNT(CASE WHEN er.status_code IN ('PASS', 'P', 'FAIL', 'F') THEN 1 END), 0), 2), 0) AS pass_percentage
+     FROM exam_results er
+     WHERE er.regn_numb = ?`,
+    [regnNumb]
   );
 
   return {
     student: studentDetails.rows[0],
     summary: summary.rows[0] || {},
     results: results.rows,
+  };
+};
+
+// 8. Distance Education Branches & Curriculum Matrix (Online vs Offline)
+const getDistanceBranches = async (options = {}) => {
+  const deliveryMode = options.delivery_mode || options.mode;
+  let modeFilter = '';
+  const params = [];
+  if (deliveryMode && deliveryMode !== 'all' && deliveryMode !== 'ALL') {
+    modeFilter = 'WHERE d.delivery_mode = ?';
+    params.push(deliveryMode.toUpperCase());
+  }
+
+  // 1. Degrees with enrollment and score analytics
+  const branchesSql = `
+    SELECT
+      d.degree_code,
+      d.degree_name,
+      d.delivery_mode,
+      d.university_code,
+      u.university_name,
+      COUNT(DISTINCT s.regn_numb) AS total_enrolled,
+      COUNT(DISTINCT er.result_id) AS total_evaluations,
+      COUNT(DISTINCT CASE WHEN er.status_code IN ('PASS', 'P') THEN er.regn_numb END) AS passed_students,
+      COUNT(DISTINCT CASE WHEN er.status_code IN ('FAIL', 'F') THEN er.regn_numb END) AS failed_students,
+      ROUND(AVG(er.total_mark), 2) AS average_marks,
+      COALESCE(ROUND(100.0 * COUNT(CASE WHEN er.status_code IN ('PASS', 'P') THEN 1 END) /
+        NULLIF(COUNT(CASE WHEN er.status_code IN ('PASS', 'P', 'FAIL', 'F') THEN 1 END), 0), 2), 0) AS pass_percentage
+    FROM degrees d
+    JOIN universities u ON u.university_code = d.university_code
+    LEFT JOIN students s ON s.degree_code = d.degree_code
+    LEFT JOIN exam_results er ON er.degree_code = d.degree_code AND er.status_code NOT IN ('CAN', 'CANCELLED')
+    ${modeFilter}
+    GROUP BY d.degree_code, d.degree_name, d.delivery_mode, d.university_code, u.university_name
+    ORDER BY d.delivery_mode ASC, d.degree_code ASC
+  `;
+
+  const branches = (await query(branchesSql, params)).rows;
+
+  // 2. Associated subjects with SUBJCODE, SUBJUNCD and stats
+  const subjectsSql = `
+    SELECT
+      er.degree_code,
+      er.curr_sems,
+      sub.subject_code,
+      sub.subject_uncode,
+      sub.subject_name,
+      COUNT(er.result_id) AS total_appeared,
+      COUNT(CASE WHEN er.status_code IN ('PASS', 'P') THEN 1 END) AS total_passed,
+      COUNT(CASE WHEN er.status_code IN ('FAIL', 'F') THEN 1 END) AS total_failed,
+      ROUND(AVG(er.total_mark), 2) AS average_marks,
+      MAX(er.total_mark) AS highest_marks,
+      MIN(er.total_mark) AS lowest_marks,
+      COALESCE(ROUND(100.0 * COUNT(CASE WHEN er.status_code IN ('PASS', 'P') THEN 1 END) /
+        NULLIF(COUNT(CASE WHEN er.status_code IN ('PASS', 'P', 'FAIL', 'F') THEN 1 END), 0), 2), 0) AS pass_percentage
+    FROM exam_results er
+    JOIN subjects sub ON sub.subject_code = er.subject_code
+    WHERE er.status_code NOT IN ('CAN', 'CANCELLED')
+    GROUP BY er.degree_code, er.curr_sems, sub.subject_code, sub.subject_uncode, sub.subject_name
+    ORDER BY er.degree_code ASC, er.curr_sems ASC, sub.subject_code ASC
+  `;
+
+  const subjectRows = (await query(subjectsSql, [])).rows;
+
+  const subjectMap = new Map();
+  subjectRows.forEach(sr => {
+    if (!subjectMap.has(sr.degree_code)) {
+      subjectMap.set(sr.degree_code, []);
+    }
+    subjectMap.get(sr.degree_code).push(sr);
+  });
+
+  const enrichedBranches = branches.map(b => ({
+    ...b,
+    subjects: subjectMap.get(b.degree_code) || []
+  }));
+
+  const onlineBranches = enrichedBranches.filter(b => b.delivery_mode === 'ONLINE');
+  const offlineBranches = enrichedBranches.filter(b => b.delivery_mode === 'OFFLINE');
+
+  return {
+    delivery_modes: ['ALL', 'ONLINE', 'OFFLINE'],
+    total_branches: enrichedBranches.length,
+    online_branches: onlineBranches,
+    offline_branches: offlineBranches,
+    all_branches: enrichedBranches,
+    branches: enrichedBranches,
   };
 };
 
@@ -256,4 +363,5 @@ module.exports = {
   mode,
   subject,
   student,
+  getDistanceBranches,
 };

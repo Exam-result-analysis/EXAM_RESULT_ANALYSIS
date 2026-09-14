@@ -18,5 +18,6 @@ router.put('/:id', resultController.updateResult);
 router.delete('/:id', resultController.deleteResult);
 router.post('/upload', upload.single('file'), resultController.uploadResults);
 router.post('/bulk', upload.single('file'), resultController.uploadResults);
+router.post('/inspect-excel', upload.single('file'), resultController.inspectExcel);
 
 module.exports = router;

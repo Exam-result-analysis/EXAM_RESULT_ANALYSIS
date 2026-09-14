@@ -9,5 +9,6 @@ router.get('/session', controller.session);
 router.get('/mode', controller.mode);
 router.get('/subject', controller.subject);
 router.get('/student', controller.student);
+router.get('/distance-branches', controller.distanceBranches);
 
 module.exports = router;

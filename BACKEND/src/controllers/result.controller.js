@@ -91,13 +91,40 @@ async function uploadResults(req, res, next) {
       throw new ApiError(400, 'Only Excel files (.xlsx or .xls) are supported.');
     }
 
-    const examId = Number(req.body.exam_id);
-    if (!Number.isInteger(examId) || examId <= 0) {
-      throw new ApiError(400, 'A valid positive integer exam_id is required in the request body.');
+    const degreeCode = Number(req.body.degree_code) || 159;
+    const data = await resultService.uploadResults(req.file.buffer, degreeCode);
+    return success(res, 200, 'Bulk result upload processed successfully.', data);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /api/results/inspect-excel
+ * Inspect Excel/CSV file to view deep insights, statistics & preview, with optional database commit.
+ */
+async function inspectExcel(req, res, next) {
+  try {
+    if (!req.file) {
+      throw new ApiError(400, 'Please upload an Excel or CSV file using the form-data field name "file".');
     }
 
-    const data = await resultService.uploadResults(req.file.buffer, examId);
-    return success(res, 200, 'Bulk result upload processed successfully.', data);
+    const extension = path.extname(req.file.originalname || '').toLowerCase();
+    if (!['.xlsx', '.xls', '.csv'].includes(extension)) {
+      throw new ApiError(400, 'Only spreadsheet files (.xlsx, .xls, .csv) are supported.');
+    }
+
+    const commit = req.query.commit === 'true' || req.body.commit === 'true' || req.body.commit === true;
+    const data = await resultService.inspectExcelFile(req.file.buffer, {
+      commit,
+      filename: req.file.originalname || 'uploaded_data.xlsx',
+    });
+
+    const message = commit
+      ? 'Spreadsheet analyzed and successfully ingested into institutional database.'
+      : 'Spreadsheet analyzed and analytical insights generated successfully.';
+
+    return success(res, 200, message, data);
   } catch (err) {
     next(err);
   }
@@ -110,4 +137,5 @@ module.exports = {
   updateResult,
   deleteResult,
   uploadResults,
+  inspectExcel,
 };

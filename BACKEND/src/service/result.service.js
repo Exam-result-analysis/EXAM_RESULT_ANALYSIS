@@ -9,13 +9,13 @@ const ApiError = require('../utils/apiError');
 function calculateGrade(total) {
   if (total === null || total === undefined || total === '') return null;
   const num = Number(total);
-  if (isNaN(num)) return null;
+  if (isNaN(num) || num < 0) return null;
   if (num >= 90) return 'O';
   if (num >= 80) return 'A+';
   if (num >= 70) return 'A';
   if (num >= 60) return 'B+';
   if (num >= 50) return 'B';
-  if (num >= 40) return 'P';
+  if (num >= 40) return 'C';
   return 'F';
 }
 
@@ -30,55 +30,63 @@ async function getAllResults(options = {}) {
   const filters = [];
   const params = [];
 
-  if (options.student_id) {
-    params.push(Number(options.student_id));
-    filters.push(`r.student_id = $${params.length}`);
+  const regnNumb = options.regn_numb || options.student_id;
+  if (regnNumb) {
+    params.push(Number(regnNumb));
+    filters.push(`er.regn_numb = ?`);
   }
-  if (options.subject_id) {
-    params.push(Number(options.subject_id));
-    filters.push(`r.subject_id = $${params.length}`);
+
+  const subjCode = options.subject_code || options.subject_id;
+  if (subjCode) {
+    params.push(Number(subjCode));
+    filters.push(`er.subject_code = ?`);
   }
-  if (options.exam_id) {
-    params.push(Number(options.exam_id));
-    filters.push(`r.exam_id = $${params.length}`);
+
+  const degCode = options.degree_code || options.course_id;
+  if (degCode) {
+    params.push(Number(degCode));
+    filters.push(`er.degree_code = ?`);
   }
-  if (options.result_status) {
-    params.push(String(options.result_status).toUpperCase());
-    filters.push(`r.result_status = $${params.length}`);
+
+  const stat = options.status_code || options.result_status;
+  if (stat) {
+    params.push(String(stat).toUpperCase());
+    filters.push(`er.status_code = ?`);
   }
 
   const whereClause = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
 
-  const countQuery = `SELECT COUNT(*) as total FROM result r ${whereClause}`;
+  const countQuery = `SELECT COUNT(*) as total FROM exam_results er ${whereClause}`;
   const countResult = await query(countQuery, params);
   const total = Number(countResult.rows[0]?.total || 0);
 
   const queryParams = [...params, limit, offset];
-  const limitIdx = queryParams.length - 1;
-  const offsetIdx = queryParams.length;
 
   const sql = `
     SELECT
-      r.result_id,
-      r.student_id,
-      s.student_name,
-      r.subject_id,
+      er.result_id,
+      er.regn_numb,
+      er.regn_numb               AS student_id,
+      ('Candidate ' || er.regn_numb) AS student_name,
+      er.subject_code,
       sub.subject_name,
-      sub.subject_code,
-      sub.subject_uni_code,
-      r.exam_id,
-      r.internal_marks,
-      r.external_marks,
-      r.total_marks,
-      r.grade,
-      r.result_status,
-      r.uploaded_at
-    FROM result r
-    JOIN student s ON s.student_id = r.student_id
-    JOIN subject sub ON sub.subject_id = r.subject_id
+      sub.subject_uncode,
+      er.degree_code,
+      d.degree_name,
+      er.curr_sems,
+      er.internal_mark           AS internal_marks,
+      er.external_mark           AS external_marks,
+      er.total_mark              AS total_marks,
+      er.grade,
+      er.type_code,
+      er.status_code             AS result_status,
+      er.created_at              AS uploaded_at
+    FROM exam_results er
+    JOIN subjects sub ON sub.subject_code = er.subject_code
+    JOIN degrees d ON d.degree_code = er.degree_code
     ${whereClause}
-    ORDER BY r.result_id DESC
-    LIMIT $${limitIdx} OFFSET $${offsetIdx}
+    ORDER BY er.result_id DESC
+    LIMIT ? OFFSET ?
   `;
 
   const rows = (await query(sql, queryParams)).rows;
@@ -98,24 +106,27 @@ async function getAllResults(options = {}) {
 async function getResultById(resultId) {
   const sql = `
     SELECT
-      r.result_id,
-      r.student_id,
-      s.student_name,
-      r.subject_id,
+      er.result_id,
+      er.regn_numb,
+      er.regn_numb               AS student_id,
+      ('Candidate ' || er.regn_numb) AS student_name,
+      er.subject_code,
       sub.subject_name,
-      sub.subject_code,
-      sub.subject_uni_code,
-      r.exam_id,
-      r.internal_marks,
-      r.external_marks,
-      r.total_marks,
-      r.grade,
-      r.result_status,
-      r.uploaded_at
-    FROM result r
-    JOIN student s ON s.student_id = r.student_id
-    JOIN subject sub ON sub.subject_id = r.subject_id
-    WHERE r.result_id = $1
+      sub.subject_uncode,
+      er.degree_code,
+      d.degree_name,
+      er.curr_sems,
+      er.internal_mark           AS internal_marks,
+      er.external_mark           AS external_marks,
+      er.total_mark              AS total_marks,
+      er.grade,
+      er.type_code,
+      er.status_code             AS result_status,
+      er.created_at              AS uploaded_at
+    FROM exam_results er
+    JOIN subjects sub ON sub.subject_code = er.subject_code
+    JOIN degrees d ON d.degree_code = er.degree_code
+    WHERE er.result_id = ?
   `;
   const result = await query(sql, [resultId]);
   if (!result.rowCount) {
@@ -128,60 +139,64 @@ async function getResultById(resultId) {
  * Create a new exam result record
  */
 async function createResult(data) {
-  const { student_id, subject_id, exam_id, internal_marks, external_marks, result_status } = data;
+  const regnNumb = data.regn_numb || data.student_id;
+  const subjCode = data.subject_code || data.subject_id;
+  const degCode = data.degree_code || data.course_id || 159;
+  const currSems = data.curr_sems || data.semester || 1;
+  const typeCode = data.type_code || 'CT';
+  const sysCode = data.system_code || 'M';
 
-  if (!student_id || !subject_id || !exam_id) {
-    throw new ApiError(400, 'student_id, subject_id, and exam_id are required');
+  if (!regnNumb || !subjCode) {
+    throw new ApiError(400, 'regn_numb and subject_code are required');
   }
 
   // Verify student exists
-  const studentCheck = await query('SELECT student_id FROM student WHERE student_id = $1', [student_id]);
+  const studentCheck = await query('SELECT regn_numb FROM students WHERE regn_numb = ?', [regnNumb]);
   if (!studentCheck.rowCount) {
-    throw new ApiError(404, `Student with ID ${student_id} not found`);
+    await query('INSERT INTO students (regn_numb, degree_code) VALUES (?, ?)', [regnNumb, degCode]);
   }
 
   // Verify subject exists
-  const subjectCheck = await query('SELECT subject_id, max_internal_marks, max_external_marks FROM subject WHERE subject_id = $1', [subject_id]);
+  const subjectCheck = await query('SELECT subject_code FROM subjects WHERE subject_code = ?', [subjCode]);
   if (!subjectCheck.rowCount) {
-    throw new ApiError(404, `Subject with ID ${subject_id} not found`);
-  }
-  const subjectInfo = subjectCheck.rows[0];
-
-  // Verify exam exists
-  const examCheck = await query('SELECT exam_id FROM exam WHERE exam_id = $1', [exam_id]);
-  if (!examCheck.rowCount) {
-    throw new ApiError(404, `Exam with ID ${exam_id} not found`);
+    throw new ApiError(404, `Subject with code ${subjCode} not found`);
   }
 
-  let parsedInternal = null;
-  let parsedExternal = null;
+  let internal = null;
+  let external = null;
 
-  if (internal_marks !== undefined && internal_marks !== null && internal_marks !== '') {
-    parsedInternal = Number(internal_marks);
-    if (isNaN(parsedInternal) || parsedInternal < 0) {
+  const rawInternal = data.internal_mark ?? data.internal_marks;
+  if (rawInternal !== undefined && rawInternal !== null && rawInternal !== '') {
+    internal = Number(rawInternal);
+    if (isNaN(internal) || internal < 0) {
       throw new ApiError(400, 'Internal marks must be a non-negative number');
     }
-    if (parsedInternal > subjectInfo.max_internal_marks) {
-      throw new ApiError(400, `Internal marks (${parsedInternal}) cannot exceed maximum allowed marks (${subjectInfo.max_internal_marks})`);
+    if (internal > 30) {
+      throw new ApiError(400, `Internal marks (${internal}) cannot exceed maximum allowed marks (30)`);
     }
   }
 
-  if (external_marks !== undefined && external_marks !== null && external_marks !== '') {
-    parsedExternal = Number(external_marks);
-    if (isNaN(parsedExternal) || parsedExternal < 0) {
+  const rawExternal = data.external_mark ?? data.external_marks;
+  if (rawExternal !== undefined && rawExternal !== null && rawExternal !== '') {
+    external = Number(rawExternal);
+    if (isNaN(external) || external < 0) {
       throw new ApiError(400, 'External marks must be a non-negative number');
     }
-    if (parsedExternal > subjectInfo.max_external_marks) {
-      throw new ApiError(400, `External marks (${parsedExternal}) cannot exceed maximum allowed marks (${subjectInfo.max_external_marks})`);
+    if (external > 70) {
+      throw new ApiError(400, `External marks (${external}) cannot exceed maximum allowed marks (70)`);
     }
   }
 
   let total_marks = null;
-  let status = result_status ? String(result_status).toUpperCase() : 'PASS';
+  let status = data.status_code || data.result_status || 'PASS';
+  if (status === 'P') status = 'PASS';
+  if (status === 'F') status = 'FAIL';
+  if (status === 'CAN') status = 'CANCELLED';
+
   let grade = data.grade || null;
 
-  if (parsedInternal !== null && parsedExternal !== null) {
-    total_marks = parsedInternal + parsedExternal;
+  if (internal !== null && external !== null) {
+    total_marks = internal + external;
     status = total_marks >= 40 ? 'PASS' : 'FAIL';
     grade = calculateGrade(total_marks);
   } else if (data.total_marks !== undefined && data.total_marks !== null) {
@@ -189,32 +204,36 @@ async function createResult(data) {
     grade = grade || calculateGrade(total_marks);
   }
 
-  const validStatuses = ['PASS', 'FAIL', 'CANCELLED'];
+  const validStatuses = ['PASS', 'FAIL', 'CANCELLED', 'P', 'F', 'CAN'];
   if (!validStatuses.includes(status)) {
     throw new ApiError(400, `Invalid result status '${status}'. Allowed values: PASS, FAIL, CANCELLED`);
   }
 
   const insertSql = `
-    INSERT INTO result (student_id, subject_id, exam_id, internal_marks, external_marks, total_marks, grade, result_status)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    INSERT INTO exam_results
+      (regn_numb, subject_code, degree_code, curr_sems, internal_mark, external_mark, total_mark, grade, type_code, status_code, system_code)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   try {
     const res = await query(insertSql, [
-      student_id,
-      subject_id,
-      exam_id,
-      parsedInternal,
-      parsedExternal,
+      regnNumb,
+      subjCode,
+      degCode,
+      currSems,
+      internal,
+      external,
       total_marks,
       grade,
+      typeCode,
       status,
+      sysCode,
     ]);
 
     return getResultById(res.lastInsertRowid);
   } catch (err) {
     if (err.message && (err.message.includes('UNIQUE constraint failed') || err.message.includes('unique constraint'))) {
-      throw new ApiError(409, 'Result already exists for this student, subject, and exam.');
+      throw new ApiError(409, 'Result already exists for this student, subject, semester, and exam type.');
     }
     throw err;
   }
@@ -228,197 +247,83 @@ async function updateResult(resultId, data) {
     throw new ApiError(400, 'Request body cannot be empty for update.');
   }
 
-  const existingRes = await query('SELECT * FROM result WHERE result_id = $1', [resultId]);
+  const existingRes = await query('SELECT * FROM exam_results WHERE result_id = ?', [resultId]);
   if (!existingRes.rowCount) {
     throw new ApiError(404, `Result with ID ${resultId} not found`);
   }
   const existing = existingRes.rows[0];
 
-  const allowedFields = [
-    'student_id',
-    'subject_id',
-    'exam_id',
-    'internal_marks',
-    'external_marks',
-    'total_marks',
-    'grade',
-    'result_status',
-  ];
-
-  const updates = {};
-  for (const key of allowedFields) {
-    if (data[key] !== undefined) {
-      updates[key] = data[key];
-    }
-  }
-
-  if (Object.keys(updates).length === 0) {
-    throw new ApiError(400, 'No valid fields provided for update.');
-  }
-
-  // Validate student_id if provided
-  if (updates.student_id !== undefined) {
-    const sCheck = await query('SELECT student_id FROM student WHERE student_id = $1', [updates.student_id]);
-    if (!sCheck.rowCount) {
-      throw new ApiError(404, `Student with ID ${updates.student_id} not found`);
-    }
-  }
-
-  // Determine effective subject_id
-  const effectiveSubjectId = updates.subject_id !== undefined ? updates.subject_id : existing.subject_id;
-  const subCheck = await query(
-    'SELECT subject_id, max_internal_marks, max_external_marks FROM subject WHERE subject_id = $1',
-    [effectiveSubjectId]
-  );
-  if (!subCheck.rowCount) {
-    throw new ApiError(404, `Subject with ID ${effectiveSubjectId} not found`);
-  }
-  const subjectInfo = subCheck.rows[0];
-
-  // Validate exam_id if provided
-  if (updates.exam_id !== undefined) {
-    const eCheck = await query('SELECT exam_id FROM exam WHERE exam_id = $1', [updates.exam_id]);
-    if (!eCheck.rowCount) {
-      throw new ApiError(404, `Exam with ID ${updates.exam_id} not found`);
-    }
-  }
-
-  // Validate internal marks
-  let internalMarks = existing.internal_marks;
-  if (updates.internal_marks !== undefined) {
-    if (updates.internal_marks === null || updates.internal_marks === '') {
-      internalMarks = null;
+  let internal = existing.internal_mark;
+  if (data.internal_marks !== undefined || data.internal_mark !== undefined) {
+    const val = data.internal_marks !== undefined ? data.internal_marks : data.internal_mark;
+    if (val === null || val === '') {
+      internal = null;
     } else {
-      internalMarks = Number(updates.internal_marks);
-      if (isNaN(internalMarks) || internalMarks < 0) {
+      internal = Number(val);
+      if (isNaN(internal) || internal < 0) {
         throw new ApiError(400, 'Internal marks must be a non-negative number or null');
       }
-      if (internalMarks > subjectInfo.max_internal_marks) {
-        throw new ApiError(
-          400,
-          `Internal marks (${internalMarks}) cannot exceed maximum allowed internal marks (${subjectInfo.max_internal_marks})`
-        );
+      if (internal > 30) {
+        throw new ApiError(400, `Internal marks (${internal}) cannot exceed maximum allowed marks (30)`);
       }
     }
-    updates.internal_marks = internalMarks;
   }
 
-  // Validate external marks
-  let externalMarks = existing.external_marks;
-  if (updates.external_marks !== undefined) {
-    if (updates.external_marks === null || updates.external_marks === '') {
-      externalMarks = null;
+  let external = existing.external_mark;
+  if (data.external_marks !== undefined || data.external_mark !== undefined) {
+    const val = data.external_marks !== undefined ? data.external_marks : data.external_mark;
+    if (val === null || val === '') {
+      external = null;
     } else {
-      externalMarks = Number(updates.external_marks);
-      if (isNaN(externalMarks) || externalMarks < 0) {
+      external = Number(val);
+      if (isNaN(external) || external < 0) {
         throw new ApiError(400, 'External marks must be a non-negative number or null');
       }
-      if (externalMarks > subjectInfo.max_external_marks) {
-        throw new ApiError(
-          400,
-          `External marks (${externalMarks}) cannot exceed maximum allowed external marks (${subjectInfo.max_external_marks})`
-        );
+      if (external > 70) {
+        throw new ApiError(400, `External marks (${external}) cannot exceed maximum allowed marks (70)`);
       }
     }
-    updates.external_marks = externalMarks;
   }
 
-  // Total marks calculation & validation
-  let totalMarks = existing.total_marks;
-  if (updates.total_marks !== undefined) {
-    if (updates.total_marks === null || updates.total_marks === '') {
-      totalMarks = null;
-    } else {
-      totalMarks = Number(updates.total_marks);
-      if (isNaN(totalMarks) || totalMarks < 0) {
-        throw new ApiError(400, 'Total marks must be a non-negative number or null');
-      }
-    }
-    updates.total_marks = totalMarks;
-  } else if (updates.internal_marks !== undefined || updates.external_marks !== undefined) {
-    if (internalMarks !== null && externalMarks !== null) {
-      totalMarks = internalMarks + externalMarks;
-      updates.total_marks = totalMarks;
-    } else {
-      totalMarks = null;
-      updates.total_marks = null;
-    }
+  let total_marks = existing.total_mark;
+  if (internal !== null && external !== null) {
+    total_marks = internal + external;
+  } else if (data.total_marks !== undefined || data.total_mark !== undefined) {
+    const val = data.total_marks !== undefined ? data.total_marks : data.total_mark;
+    total_marks = val === null || val === '' ? null : Number(val);
   }
 
-  // Grade calculation & validation
-  if (updates.grade !== undefined) {
-    if (updates.grade !== null && updates.grade !== '') {
-      updates.grade = String(updates.grade).toUpperCase();
-    } else {
-      updates.grade = null;
-    }
-  } else if (
-    updates.internal_marks !== undefined ||
-    updates.external_marks !== undefined ||
-    updates.total_marks !== undefined
-  ) {
-    updates.grade = calculateGrade(totalMarks);
+  let grade = data.grade !== undefined ? data.grade : calculateGrade(total_marks);
+  let status = data.result_status || data.status_code || existing.status_code;
+  if (status === 'P') status = 'PASS';
+  if (status === 'F') status = 'FAIL';
+  if (status === 'CAN') status = 'CANCELLED';
+
+  if (total_marks !== null && status !== 'CANCELLED') {
+    status = total_marks >= 40 ? 'PASS' : 'FAIL';
   }
 
-  // Result status validation
-  const validStatuses = ['PASS', 'FAIL', 'CANCELLED'];
-  if (updates.result_status !== undefined) {
-    const statusUpper = String(updates.result_status).toUpperCase();
-    if (!validStatuses.includes(statusUpper)) {
-      throw new ApiError(
-        400,
-        `Invalid result status '${updates.result_status}'. Allowed values: PASS, FAIL, CANCELLED`
-      );
-    }
-    updates.result_status = statusUpper;
-  } else if (
-    updates.internal_marks !== undefined ||
-    updates.external_marks !== undefined ||
-    updates.total_marks !== undefined
-  ) {
-    if (totalMarks !== null && totalMarks !== undefined) {
-      updates.result_status = totalMarks >= 40 ? 'PASS' : 'FAIL';
-    }
-  }
-
-  // Build and execute UPDATE query
-  const setClauses = [];
-  const queryValues = [];
-
-  Object.keys(updates).forEach((key) => {
-    queryValues.push(updates[key]);
-    setClauses.push(`${key} = $${queryValues.length}`);
-  });
-
-  queryValues.push(resultId);
   const sql = `
-    UPDATE result
-    SET ${setClauses.join(', ')}
-    WHERE result_id = $${queryValues.length}
+    UPDATE exam_results
+    SET internal_mark = ?, external_mark = ?, total_mark = ?, grade = ?, status_code = ?
+    WHERE result_id = ?
   `;
 
-  try {
-    await query(sql, queryValues);
-    return getResultById(resultId);
-  } catch (err) {
-    if (err.message && (err.message.includes('UNIQUE constraint failed') || err.message.includes('unique constraint'))) {
-      throw new ApiError(409, 'A result record with this student, subject, and exam already exists.');
-    }
-    throw err;
-  }
+  await query(sql, [internal, external, total_marks, grade, status, resultId]);
+  return getResultById(resultId);
 }
 
 /**
  * Delete a result
  */
 async function deleteResult(resultId) {
-  const check = await query('SELECT * FROM result WHERE result_id = $1', [resultId]);
+  const check = await query('SELECT * FROM exam_results WHERE result_id = ?', [resultId]);
   if (!check.rowCount) {
     throw new ApiError(404, `Result with ID ${resultId} not found`);
   }
   const deletedResult = check.rows[0];
 
-  await query('DELETE FROM result WHERE result_id = $1', [resultId]);
+  await query('DELETE FROM exam_results WHERE result_id = ?', [resultId]);
   return {
     message: `Result ${resultId} deleted successfully`,
     deletedResult,
@@ -428,7 +333,7 @@ async function deleteResult(resultId) {
 /**
  * Bulk upload results from Excel file buffer
  */
-async function uploadResults(fileBuffer, examId) {
+async function uploadResults(fileBuffer, degreeCode = 159) {
   let workbook;
   try {
     workbook = XLSX.read(fileBuffer, { type: 'buffer' });
@@ -446,253 +351,63 @@ async function uploadResults(fileBuffer, examId) {
     throw new ApiError(400, 'Excel worksheet is empty.');
   }
 
-  // Verify target exam exists
-  const examResult = await query(
-    `SELECT e.exam_id, e.session_id, e.mode_id, e.exam_type, e.university, e.result_system,
-            a.academic_year, a.semester
-     FROM exam e
-     JOIN academic_session a ON a.session_id = e.session_id
-     WHERE e.exam_id = $1`,
-    [examId]
-  );
-  if (!examResult.rowCount) {
-    throw new ApiError(404, `Exam with ID ${examId} not found in database.`);
-  }
-  const exam = examResult.rows[0];
-
-  const STATUS_MAP = {
-    P: 'PASS',
-    PASS: 'PASS',
-    F: 'FAIL',
-    FAIL: 'FAIL',
-    CAN: 'CANCELLED',
-    CANCELLED: 'CANCELLED',
-  };
-
   const invalidRecords = [];
   const duplicateRecords = [];
-  const parsedRows = [];
-
-  // Parse each row
-  rawRows.forEach((row, idx) => {
-    const rowNumber = idx + 2; // header is row 1
-    const errors = [];
-
-    // Helper to find column case-insensitively
-    const getVal = (colName) => {
-      const foundKey = Object.keys(row).find((k) => k.trim().toUpperCase() === colName.toUpperCase());
-      return foundKey !== undefined ? String(row[foundKey]).trim() : '';
-    };
-
-    const studentIdStr = getVal('REGNNUMB') || getVal('student_id');
-    const subjCodeStr = getVal('SUBJCODE') || getVal('subject_code');
-    const subjUniCode = getVal('SUBJUNCD') || getVal('subject_uni_code');
-    const intnMarkStr = getVal('INTNMARK') || getVal('internal_marks');
-    const extMarkStr = getVal('EXT_MARK') || getVal('external_marks');
-    const totalStr = getVal('TOTAL') || getVal('total_marks');
-    const gradeStr = getVal('GRADE') || getVal('grade');
-    const degrCodeStr = getVal('DEGRCODE') || getVal('course_code');
-    const currSemsStr = getVal('CURRSEMS') || getVal('semester');
-    const examTypeStr = getVal('TYPE') || getVal('exam_type');
-    const resStatStr = (getVal('RES_STAT') || getVal('result_status') || 'PASS').toUpperCase();
-    const univStr = getVal('UNIVERSITY') || getVal('university');
-    const resSysStr = getVal('RESULT_SYSTE') || getVal('result_system');
-
-    if (!studentIdStr || isNaN(Number(studentIdStr))) {
-      errors.push('Invalid or missing student register number (REGNNUMB).');
-    }
-    if (!subjUniCode) {
-      errors.push('Missing subject university code (SUBJUNCD).');
-    }
-
-    const studentId = Number(studentIdStr);
-    const parseNumber = (val) => {
-      if (val === '' || val === null || val === undefined) return null;
-      const n = Number(val);
-      return isNaN(n) ? null : n;
-    };
-
-    const intnMark = parseNumber(intnMarkStr);
-    const extMark = parseNumber(extMarkStr);
-    const totalMark = parseNumber(totalStr);
-
-    if (intnMarkStr !== '' && intnMark === null) errors.push('Internal marks (INTNMARK) must be a number.');
-    if (extMarkStr !== '' && extMark === null) errors.push('External marks (EXT_MARK) must be a number.');
-    if (totalStr !== '' && totalMark === null) errors.push('Total marks (TOTAL) must be a number.');
-
-    const mappedStatus = STATUS_MAP[resStatStr];
-    if (!mappedStatus) {
-      errors.push(`Invalid result status '${resStatStr}'. Must be P/PASS, F/FAIL, or CAN/CANCELLED.`);
-    }
-
-    if (errors.length > 0) {
-      invalidRecords.push({ row: rowNumber, errors });
-    } else {
-      parsedRows.push({
-        rowNumber,
-        studentId,
-        subjCode: subjCodeStr,
-        subjUniCode,
-        intnMark,
-        extMark,
-        totalMark,
-        grade: gradeStr ? gradeStr.toUpperCase() : null,
-        degrCode: degrCodeStr,
-        currSems: currSemsStr ? Number(currSemsStr) : null,
-        examType: examTypeStr,
-        univ: univStr,
-        resSys: resSysStr,
-        resultStatus: mappedStatus,
-      });
-    }
-  });
-
-  if (parsedRows.length === 0) {
-    return {
-      summary: {
-        totalRecords: rawRows.length,
-        insertedRecords: 0,
-        invalidRecords: invalidRecords.length,
-        duplicateRecords: 0,
-      },
-      invalidRecords,
-      duplicateRecords,
-    };
-  }
-
-  // Pre-load reference students and subjects from database for validation
-  const allStudents = (await query('SELECT student_id, course_id, department_id FROM student')).rows;
-  const studentMap = new Map(allStudents.map((s) => [Number(s.student_id), s]));
-
-  const allSubjects = (
-    await query(
-      'SELECT subject_id, course_id, subject_code, subject_uni_code, semester_number, max_internal_marks, max_external_marks FROM subject'
-    )
-  ).rows;
-  const subjectMap = new Map(allSubjects.map((s) => [s.subject_uni_code.toUpperCase(), s]));
-
-  // Pre-load existing results for this exam
-  const existingResults = (await query('SELECT student_id, subject_id FROM result WHERE exam_id = $1', [examId])).rows;
-  const existingKeySet = new Set(existingResults.map((r) => `${r.student_id}_${r.subject_id}`));
-
-  const seenInFileSet = new Set();
   const validCandidates = [];
 
-  for (const item of parsedRows) {
-    const errors = [];
-    const student = studentMap.get(item.studentId);
-    const subject = subjectMap.get(item.subjUniCode.toUpperCase());
+  for (let idx = 0; idx < rawRows.length; idx++) {
+    const row = rawRows[idx];
+    const rowNumber = idx + 2;
 
-    if (!student) {
-      errors.push(`Student with register number ${item.studentId} does not exist.`);
-    }
-    if (!subject) {
-      errors.push(`Subject with code ${item.subjUniCode} does not exist.`);
-    }
+    const regnNumbStr = String(row.REGNNUMB || row.regn_numb || row.student_id || '').trim();
+    const subjCodeStr = String(row.SUBJCODE || row.subject_code || '').trim();
 
-    if (student && subject) {
-      if (student.course_id !== subject.course_id) {
-        errors.push(`Student (${item.studentId}) and Subject (${item.subjUniCode}) belong to different courses.`);
-      }
-
-      if (item.currSems && subject.semester_number !== item.currSems) {
-        errors.push(`CURRSEMS ${item.currSems} does not match subject semester ${subject.semester_number}.`);
-      }
-
-      if (item.intnMark !== null && item.intnMark > subject.max_internal_marks) {
-        errors.push(`INTNMARK (${item.intnMark}) exceeds maximum allowed (${subject.max_internal_marks}).`);
-      }
-
-      if (item.extMark !== null && item.extMark > subject.max_external_marks) {
-        errors.push(`EXT_MARK (${item.extMark}) exceeds maximum allowed (${subject.max_external_marks}).`);
-      }
-    }
-
-    if (item.examType && exam.exam_type && item.examType.toUpperCase() !== exam.exam_type.toUpperCase()) {
-      errors.push(`TYPE '${item.examType}' does not match exam type '${exam.exam_type}'.`);
-    }
-
-    if (errors.length > 0) {
-      invalidRecords.push({ row: item.rowNumber, errors });
+    if (!regnNumbStr || isNaN(Number(regnNumbStr))) {
+      invalidRecords.push({ row: rowNumber, errors: ['Invalid registration number'] });
       continue;
     }
 
-    const key = `${item.studentId}_${subject.subject_id}`;
-    if (seenInFileSet.has(key)) {
-      duplicateRecords.push({
-        row: item.rowNumber,
-        reason: `Duplicate entry in file for student ${item.studentId} and subject ${item.subjUniCode}.`,
-      });
-      continue;
-    }
-    seenInFileSet.add(key);
+    const regnNumb = Number(regnNumbStr);
+    const subjCode = Number(subjCodeStr);
 
-    if (existingKeySet.has(key)) {
-      duplicateRecords.push({
-        row: item.rowNumber,
-        reason: `Result already exists in database for student ${item.studentId}, subject ${item.subjUniCode}, exam ${examId}.`,
-      });
+    const studentCheck = await query('SELECT regn_numb FROM students WHERE regn_numb = ?', [regnNumb]);
+    if (!studentCheck.rowCount) {
+      invalidRecords.push({ row: rowNumber, errors: [`Student ${regnNumb} does not exist.`] });
       continue;
     }
 
-    // Auto-compute total and grade if not supplied or for consistency
-    let finalTotal = item.totalMark;
-    if (finalTotal === null && item.intnMark !== null && item.extMark !== null) {
-      finalTotal = item.intnMark + item.extMark;
-    }
-
-    let finalGrade = item.grade;
-    if (!finalGrade && finalTotal !== null) {
-      finalGrade = calculateGrade(finalTotal);
-    }
-
-    let finalStatus = item.resultStatus;
-    if (finalStatus === 'PASS' && finalTotal !== null && finalTotal < 40) {
-      finalStatus = 'FAIL';
-    }
+    const intMark = Number(row.INTNMARK || row.internal_marks) || 0;
+    const extMark = Number(row.EXT_MARK || row.external_marks) || 0;
+    const totMark = intMark + extMark;
+    const grade = calculateGrade(totMark);
+    const status = totMark >= 40 ? 'PASS' : 'FAIL';
 
     validCandidates.push({
-      studentId: item.studentId,
-      subjectId: subject.subject_id,
-      examId,
-      internalMarks: item.intnMark,
-      externalMarks: item.extMark,
-      totalMarks: finalTotal,
-      grade: finalGrade,
-      resultStatus: finalStatus,
+      regnNumb,
+      subjCode: subjCode || 20055,
+      degCode: Number(row.DEGRCODE) || 159,
+      currSems: Number(row.CURRSEMS) || 1,
+      intMark,
+      extMark,
+      totMark,
+      grade,
+      typeCode: String(row.TYPE || 'CT').toUpperCase(),
+      status,
+      systemCode: 'M'
     });
   }
 
-  // Insert valid rows in database transaction
   let insertedCount = 0;
-  if (validCandidates.length > 0) {
-    db.exec('BEGIN TRANSACTION;');
+  for (const c of validCandidates) {
     try {
-      const insertStmt = db.prepare(`
-        INSERT INTO result (student_id, subject_id, exam_id, internal_marks, external_marks, total_marks, grade, result_status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-
-      for (const row of validCandidates) {
-        insertStmt.run(
-          row.studentId,
-          row.subjectId,
-          row.examId,
-          row.internalMarks,
-          row.externalMarks,
-          row.totalMarks,
-          row.grade,
-          row.resultStatus
-        );
-        insertedCount++;
-      }
-      db.exec('COMMIT;');
-    } catch (err) {
-      try {
-        db.exec('ROLLBACK;');
-      } catch (rbErr) {}
-      throw err;
-    }
+      await query(`
+        INSERT INTO exam_results
+          (regn_numb, subject_code, degree_code, curr_sems, internal_mark, external_mark, total_mark, grade, type_code, status_code, system_code)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(regn_numb, subject_code, curr_sems, type_code) DO NOTHING
+      `, [c.regnNumb, c.subjCode, c.degCode, c.currSems, c.intMark, c.extMark, c.totMark, c.grade, c.typeCode, c.status, c.systemCode]);
+      insertedCount++;
+    } catch (e) {}
   }
 
   return {
@@ -707,6 +422,251 @@ async function uploadResults(fileBuffer, examId) {
   };
 }
 
+/**
+ * Inspect uploaded Excel / CSV file and extract complete analytical insights,
+ * data quality metrics, subject performance, and preview records.
+ * Optionally commits the dataset directly to the database.
+ */
+async function inspectExcelFile(fileBuffer, options = {}) {
+  const { commit = false, filename = 'uploaded_data.xlsx' } = options;
+  const ingestService = require('./ingest.service');
+
+  let workbook;
+  try {
+    workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+  } catch (err) {
+    throw new ApiError(400, 'Unable to parse spreadsheet file. Please ensure it is a valid .xlsx, .xls, or .csv file.');
+  }
+
+  const sheetName = workbook.SheetNames[0];
+  if (!sheetName) {
+    throw new ApiError(400, 'Spreadsheet contains no sheets.');
+  }
+
+  const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+  if (!rawRows || rawRows.length === 0) {
+    throw new ApiError(400, 'Spreadsheet worksheet is empty. No rows found.');
+  }
+
+  const studentsSet = new Set();
+  const subjectsMap = new Map();
+  const degreesSet = new Set();
+  const semestersSet = new Set();
+  const examTypesSet = new Set();
+
+  let passCount = 0;
+  let failCount = 0;
+  let cancelledCount = 0;
+  let absentSanitizedCount = 0;
+
+  let sumInternal = 0;
+  let countInternal = 0;
+  let sumExternal = 0;
+  let countExternal = 0;
+  let sumTotal = 0;
+  let countTotal = 0;
+  let highestTotal = 0;
+  let lowestTotal = 100;
+
+  const sanitizedRows = [];
+  const previewRows = [];
+
+  for (let idx = 0; idx < rawRows.length; idx++) {
+    const row = rawRows[idx];
+    const rowNumber = idx + 2;
+
+    const rawRegn = row.REGNNUMB || row.regn_numb || row.student_id || row.regnNumb || row.studentId;
+    const regnNumb = parseInt(rawRegn, 10);
+
+    if (!isNaN(regnNumb)) {
+      studentsSet.add(regnNumb);
+    }
+
+    const degreeCode = parseInt(row.DEGRCODE || row.degree_code || row.degreeCode || 159, 10);
+    degreesSet.add(degreeCode);
+
+    const currSems = parseInt(row.CURRSEMS || row.curr_sems || row.currSems || row.semester || 1, 10);
+    semestersSet.add(currSems);
+
+    const typeCode = String(row.TYPE || row.type_code || row.typeCode || 'CT').trim().toUpperCase();
+    examTypesSet.add(typeCode);
+
+    const subjCode = parseInt(row.SUBJCODE || row.subject_code || row.subject_id || 20055, 10);
+    const subjUncode = String(row.SUBJUNCD || row.subject_uncode || `OBA${subjCode}`).trim();
+    const subjName = row.SUBJNAME || row.subject_name || row.subjectName || `Subject ${subjCode}`;
+
+    // Normalize status
+    const rawStatus = String(row.RES_STAT || row.status_code || row.result_status || '').trim().toUpperCase();
+    let status = 'PASS';
+    if (rawStatus === 'F' || rawStatus === 'FAIL') {
+      status = 'FAIL';
+      failCount++;
+    } else if (rawStatus === 'CAN' || rawStatus === 'CANCELLED') {
+      status = 'CANCELLED';
+      cancelledCount++;
+    } else {
+      status = 'PASS';
+      passCount++;
+    }
+
+    // Sanitize marks (-1 becomes null)
+    let internal = null;
+    const rawInt = row.INTNMARK ?? row.internal_marks ?? row.internal_mark;
+    const numInt = Number(rawInt);
+    if (rawInt !== null && rawInt !== undefined && rawInt !== '' && !isNaN(numInt) && numInt >= 0 && numInt !== -1) {
+      internal = numInt;
+      sumInternal += internal;
+      countInternal++;
+    } else {
+      absentSanitizedCount++;
+    }
+
+    let external = null;
+    const rawExt = row.EXT_MARK ?? row.external_marks ?? row.external_mark;
+    const numExt = Number(rawExt);
+    if (rawExt !== null && rawExt !== undefined && rawExt !== '' && !isNaN(numExt) && numExt >= 0 && numExt !== -1) {
+      external = numExt;
+      sumExternal += external;
+      countExternal++;
+    } else {
+      absentSanitizedCount++;
+    }
+
+    let total = null;
+    const rawTot = row.TOTAL ?? row.total_marks ?? row.total_mark;
+    const numTot = Number(rawTot);
+    if (rawTot !== null && rawTot !== undefined && rawTot !== '' && !isNaN(numTot) && numTot >= 0 && numTot !== -1) {
+      total = numTot;
+    } else if (internal !== null && external !== null) {
+      total = internal + external;
+    }
+
+    if (total !== null) {
+      sumTotal += total;
+      countTotal++;
+      if (total > highestTotal) highestTotal = total;
+      if (total < lowestTotal) lowestTotal = total;
+    }
+
+    const grade = row.GRADE || row.grade || calculateGrade(total);
+
+    // Track subject-level metrics
+    if (!subjectsMap.has(subjCode)) {
+      subjectsMap.set(subjCode, {
+        subject_code: subjCode,
+        subject_uncode: subjUncode,
+        subject_name: subjName,
+        total_appeared: 0,
+        passed: 0,
+        failed: 0,
+        cancelled: 0,
+        sum_marks: 0,
+        highest_marks: 0,
+        lowest_marks: 100,
+        marks_count: 0,
+      });
+    }
+
+    const subjStat = subjectsMap.get(subjCode);
+    subjStat.total_appeared++;
+    if (status === 'PASS') subjStat.passed++;
+    else if (status === 'FAIL') subjStat.failed++;
+    else if (status === 'CANCELLED') subjStat.cancelled++;
+
+    if (total !== null) {
+      subjStat.sum_marks += total;
+      subjStat.marks_count++;
+      if (total > subjStat.highest_marks) subjStat.highest_marks = total;
+      if (total < subjStat.lowest_marks) subjStat.lowest_marks = total;
+    }
+
+    const sanitizedRow = {
+      row_number: rowNumber,
+      regn_numb: regnNumb || null,
+      subject_code: subjCode,
+      subject_uncode: subjUncode,
+      subject_name: subjName,
+      degree_code: degreeCode,
+      curr_sems: currSems,
+      internal_mark: internal,
+      external_mark: external,
+      total_mark: total,
+      grade,
+      status_code: status,
+      type_code: typeCode,
+      university: row.UNIVERSITY || 'AUC',
+      result_system: row.RESULT_SYSTEM || 'M',
+    };
+
+    sanitizedRows.push(sanitizedRow);
+
+    if (previewRows.length < 100) {
+      previewRows.push(sanitizedRow);
+    }
+  }
+
+  // Format subject performance list
+  const subjectsBreakdown = Array.from(subjectsMap.values()).map(s => ({
+    subject_code: s.subject_code,
+    subject_uncode: s.subject_uncode,
+    subject_name: s.subject_name,
+    total_appeared: s.total_appeared,
+    passed: s.passed,
+    failed: s.failed,
+    cancelled: s.cancelled,
+    pass_percentage: s.passed + s.failed > 0
+      ? Number((100.0 * s.passed / (s.passed + s.failed)).toFixed(2))
+      : 0,
+    average_marks: s.marks_count > 0 ? Number((s.sum_marks / s.marks_count).toFixed(2)) : 0,
+    highest_marks: s.highest_marks,
+    lowest_marks: s.lowest_marks === 100 && s.marks_count === 0 ? 0 : s.lowest_marks,
+  })).sort((a, b) => b.pass_percentage - a.pass_percentage);
+
+  const evaluatedTotal = passCount + failCount;
+  const overallPassRate = evaluatedTotal > 0
+    ? Number((100.0 * passCount / evaluatedTotal).toFixed(2))
+    : 0;
+
+  const insights = {
+    file_metadata: {
+      filename,
+      sheet_name: sheetName,
+      total_records: rawRows.length,
+      unique_students: studentsSet.size,
+      unique_subjects: subjectsMap.size,
+      degrees_detected: Array.from(degreesSet),
+      semesters_detected: Array.from(semestersSet),
+      exam_types_detected: Array.from(examTypesSet),
+    },
+    performance_summary: {
+      overall_pass_percentage: overallPassRate,
+      total_appeared: rawRows.length,
+      total_passed: passCount,
+      total_failed: failCount,
+      total_cancelled: cancelledCount,
+      sanitized_absent_null_count: absentSanitizedCount,
+      average_internal_marks: countInternal > 0 ? Number((sumInternal / countInternal).toFixed(2)) : 0,
+      average_external_marks: countExternal > 0 ? Number((sumExternal / countExternal).toFixed(2)) : 0,
+      average_total_marks: countTotal > 0 ? Number((sumTotal / countTotal).toFixed(2)) : 0,
+      highest_marks: highestTotal,
+      lowest_marks: countTotal > 0 ? lowestTotal : 0,
+    },
+    subject_breakdown: subjectsBreakdown,
+    preview_records: previewRows,
+  };
+
+  let ingestionResult = null;
+  if (commit === true || commit === 'true') {
+    ingestionResult = await ingestService.ingestRawData(sanitizedRows);
+  }
+
+  return {
+    insights,
+    committed: Boolean(commit === true || commit === 'true'),
+    ingestion_result: ingestionResult,
+  };
+}
+
 module.exports = {
   calculateGrade,
   getAllResults,
@@ -715,4 +675,5 @@ module.exports = {
   updateResult,
   deleteResult,
   uploadResults,
+  inspectExcelFile,
 };

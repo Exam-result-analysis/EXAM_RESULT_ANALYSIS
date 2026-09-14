@@ -1,86 +1,116 @@
-Folder For Backend# Exam Result Analysis System (Backend REST API)
+# Institutional Exam Result Analysis System (AUCDE Edition)
 
-A robust, production-grade REST API backend for Exam Result Analysis built with **Node.js**, **Express**, **SQLite** (`better-sqlite3`), and **JWT Authentication**.
-
----
-
-## Features
-- **Master Data Models**: Departments, Courses, Subjects, Students, Academic Sessions, Examination Modes, and Exams.
-- **Fact Table Analytics**: All percentage calculations and analytical metrics computed directly in SQL queries with zero client-side recalculation.
-  - Formula: \(\text{Pass \%} = \frac{\text{Passed}}{\text{Passed} + \text{Failed}} \times 100\) (excluding `CANCELLED` results, guarded by `NULLIF`).
-- **7 Analytical Dimensions**:
-  1. `GET /api/analysis/overall` — System-wide summary (total students, departments, courses, subjects, pass/fail counts, overall pass %).
-  2. `GET /api/analysis/department` — Department-wise pass percentage rankings and student distributions.
-  3. `GET /api/analysis/course` — Course-level breakdown with optional `department_id` filtering.
-  4. `GET /api/analysis/session` — Longitudinal pass % trends across academic sessions and semesters.
-  5. `GET /api/analysis/mode` — Comparative performance analysis for `ONLINE` vs `OFFLINE` exam modes.
-  6. `GET /api/analysis/subject` — Subject performance metrics (average, highest, lowest marks, total appeared, pass %).
-  7. `GET /api/analysis/student` — Comprehensive individual student drill-down with KPI summary and semester mark sheet.
-- **JWT Authentication & RBAC**:
-  - Secure bcrypt password hashing.
-  - Stateless JWT token issuance and `authMiddleware`.
-  - Roles: `admin`, `faculty`, `student`.
-  - Seeded test accounts:
-    - Admin: `admin@example.com` / `Password123!`
-    - Faculty: `faculty@example.com` / `Password123!`
-    - Student: `student@example.com` / `Password123!`
-- **Result CRUD API**:
-  - `GET /api/results` (with pagination, filters)
-  - `GET /api/results/:id`
-  - `POST /api/results` (auto-calculates total marks, grade, status)
-  - `DELETE /api/results/:id`
-- **Zero External Infrastructure**: Runs standalone with SQLite out of the box.
+A production-grade, high-performance **Anna University Centre for Distance and Online Education (AUCDE) Exam Result Analysis & Performance Intelligence System** engineered with a normalized 3NF relational database schema, pure SQL analytical aggregations, and REST API endpoints.
 
 ---
 
-## Getting Started
+## 🏛️ System Features & Delivery Modes
 
-### 1. Installation
+The system models Anna University distance education degree branches, curriculum matrices, and performance metrics across two distinct delivery modes:
+
+### Mode 1: Online Learning (OL) — `ONLINE`
+100% digital delivery via Learning Management System (LMS) and online examinations:
+- **MBA in Business Analytics** (Degree Code: `501`)
+- **MBA in General Management** (Degree Code: `502`)
+- **MBA in Financial Management** (Degree Code: `503`)
+- **MBA in Human Resource Management** (Degree Code: `504`)
+- **MBA in Marketing Management** (Degree Code: `505`)
+- **Master of Computer Applications (MCA Online)** (Degree Code: `510`)
+- **M.Sc in Computer Science (Online)** (Degree Code: `520`)
+
+### Mode 2: Open and Distance Learning (ODL) — `OFFLINE`
+Physical study centers, printed course materials, and proctored examinations:
+- **MBA in Operations Management** (Degree Code: `601`)
+- **MBA in Technology Management** (Degree Code: `602`)
+- **MBA in Health Services Management** (Degree Code: `603`)
+- **MCA (ODL)** (Degree Code: `610`)
+- **M.Sc in Information Technology** (Degree Code: `620`)
+- **B.E. Distance Engineering**:
+  - Mechanical (`159`), Civil (`160`), EEE (`161`), ECE (`162`), CSE (`163`), IT (`164`)
+
+---
+
+## 📚 Exact Subject Code Matrices
+
+Each branch contains semester-wise subject mappings featuring numerical `SUBJCODE` and alphanumeric `SUBJUNCD`:
+- **MBA Programs**: `50011`–`50025` (`DBA5101`–`DBA5205`)
+- **MCA Programs**: `51011`–`51025` (`DCA5101`–`DCA5205`)
+- **M.Sc CS / IT**: `52011`–`52015` (`DCS5101`–`DCS5105`)
+- **B.E. Distance**: `20055`–`20106` (`OBA1101`–`OBA1206`)
+
+---
+
+## 📊 Sample Datasets Exported
+
+Pre-generated sample datasets are included:
+- `data/sample_exam_results.json` (4,338 records across 446 candidates)
+- `data/sample_exam_results.csv`
+- `data/sample_exam_results.xlsx`
+
+---
+
+## 🚀 Quick Start Guide
+
+### 1. Install Dependencies
 ```bash
 npm install
 ```
 
-### 2. Database Setup & Seed
-Populate the database with test departments, courses, subjects, sessions, exam modes, 120 students, and ~960 results:
+### 2. Seed Database
 ```bash
 npm run seed
 ```
 
-### 3. Start the Server
-Development mode (with auto-reload):
+### 3. Start Server
 ```bash
+# Production mode
+npm start
+
+# Development mode (nodemon auto-restart)
 npm run dev
 ```
+> Server runs on `http://localhost:5000`
 
-Production mode:
-```bash
-npm start
-```
-Server will be available at: `http://localhost:5000`
-
-### 4. Run Verification Suite
+### 4. Run Automated Test Suite
 ```bash
 npm test
 ```
+All **66 end-to-end integration tests** verify authentication, analytical aggregations, distance education filters, and Excel ingestion.
 
 ---
 
-## API Endpoints Reference
+## 🌐 REST API Reference
 
-### Authentication
-- `POST /api/auth/login` — `{ email, password }` -> `{ token, user }`
-- `POST /api/auth/register` — `{ email, password, role }` -> `{ token, user }`
-- `POST /api/auth/logout` — Discard session confirmation
-- `GET /api/auth/profile` — (Protected) Get authenticated user profile
+### Distance & Analytical Dimensions (Pure SQL Computation)
+| Method | Endpoint | Description |
+| :---: | :--- | :--- |
+| `GET` | `/health` | Server health check |
+| `GET` | `/api/analysis/distance-branches` | All Online & Offline branches with subject codes |
+| `GET` | `/api/analysis/distance-branches?delivery_mode=ONLINE` | 7 Online Learning (OL) programs |
+| `GET` | `/api/analysis/distance-branches?delivery_mode=OFFLINE` | 11 Distance (ODL) programs |
+| `GET` | `/api/analysis/overall` | Overall institutional pass % and student totals |
+| `GET` | `/api/analysis/department` | Branch rankings ordered by pass rate |
+| `GET` | `/api/analysis/course` | Course performance breakdown (passed vs failed) |
+| `GET` | `/api/analysis/subject` | Subject spectrum (averages, pass %) |
+| `GET` | `/api/analysis/session` | Longitudinal session pass % trendline |
+| `GET` | `/api/analysis/mode` | Online vs Offline comparative statistics |
+| `GET` | `/api/analysis/student?student_id=12321100062` | Candidate profile and mark sheet |
 
-### Analytical APIs
-- `GET /api/analysis/overall?academic_year=2023-24&semester=1`
-- `GET /api/analysis/department?academic_year=2023-24`
-- `GET /api/analysis/course?department_id=1`
-- `GET /api/analysis/session?course_id=1`
-- `GET /api/analysis/mode`
-- `GET /api/analysis/subject?course_id=1`
-- `GET /api/analysis/student?student_id=12321100001`
+### Excel Insights & Ingestion Engine
+| Method | Endpoint | Description |
+| :---: | :--- | :--- |
+| `GET` | `/api/export/template` | Download pre-formatted Excel template |
+| `POST` | `/api/results/inspect-excel` | Instant visual insights on custom `.xlsx` before DB commit |
+| `POST` | `/api/results/inspect-excel?commit=true` | Ingest Excel file and commit to database |
+| `POST` | `/api/ingest` | Raw JSON batch ingestion with `-1` absent sanitization |
+| `GET` | `/api/export` | Export reports (`type=csv` or `type=excel`) |
 
-### Healthcheck
-- `GET /health` — Service status check
+---
+
+## 🔒 Authentication & CRUD
+- `POST /api/auth/register` — Register user (`faculty`, `admin`, `student`)
+- `POST /api/auth/login` — Authenticate and receive JWT token
+- `GET /api/auth/profile` — View current authenticated user
+- `GET /api/results` — Paginated exam results
+- `PUT /api/results/:id` — Update marks (with automatic recalculation)
+- `DELETE /api/results/:id` — Delete result record
