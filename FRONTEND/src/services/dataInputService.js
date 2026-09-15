@@ -2,8 +2,31 @@ import api from './api'
 
 export const dataInputService = {
   /**
+   * Inspect an uploaded Excel/CSV file — returns deep analytics, subject breakdown, and preview.
+   * Optionally commits the data to the database.
+   * Backend: POST /api/results/inspect-excel
+   * @param {File} file - The spreadsheet file (.xlsx, .xls, .csv)
+   * @param {boolean} commit - If true, data is also ingested into the database
+   * @returns {Object} { insights, committed, ingestion_result }
+   */
+  async inspectExcel(file, commit = false) {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (commit) {
+      formData.append('commit', 'true')
+    }
+
+    const res = await api.post('/results/inspect-excel', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000, // larger timeout for big files
+    })
+    return res.data.data
+  },
+
+  /**
    * Get paginated results with filters
-   * @param {Object} params { page, limit, search, department_id, course_id, subject_id, semester, academic_year, result_status }
+   * Backend: GET /api/results
+   * @param {Object} params { page, limit, regn_numb, subject_code, degree_code, status_code }
    */
   async getResults(params = {}) {
     const res = await api.get('/results', { params })
@@ -12,6 +35,7 @@ export const dataInputService = {
 
   /**
    * Get single result by ID
+   * Backend: GET /api/results/:id
    * @param {number|string} id
    */
   async getResultById(id) {
@@ -21,7 +45,8 @@ export const dataInputService = {
 
   /**
    * Create new result entry
-   * @param {Object} data { student_id, subject_id, exam_id, internal_marks, external_marks }
+   * Backend: POST /api/results
+   * @param {Object} data { regn_numb, subject_code, degree_code, curr_sems, internal_mark, external_mark, type_code, status_code }
    */
   async createResult(data) {
     const res = await api.post('/results', data)
@@ -30,6 +55,7 @@ export const dataInputService = {
 
   /**
    * Update existing result entry
+   * Backend: PUT /api/results/:id
    * @param {number|string} id
    * @param {Object} data { internal_marks, external_marks, result_status }
    */
@@ -40,6 +66,7 @@ export const dataInputService = {
 
   /**
    * Delete a result entry
+   * Backend: DELETE /api/results/:id
    * @param {number|string} id
    */
   async deleteResult(id) {
@@ -48,19 +75,18 @@ export const dataInputService = {
   },
 
   /**
-   * Upload bulk Excel file (.xlsx / .xls)
+   * Upload bulk Excel file (.xlsx / .xls) for ingestion
+   * Backend: POST /api/results/upload
    * @param {File} file
-   * @param {number|string} examId
+   * @param {number|string} degreeCode - The degree code to associate with uploads
    */
-  async uploadBulkResults(file, examId) {
+  async uploadBulkResults(file, degreeCode = 159) {
     const formData = new FormData()
     formData.append('file', file)
-    formData.append('exam_id', examId)
+    formData.append('degree_code', degreeCode)
 
     const res = await api.post('/results/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      headers: { 'Content-Type': 'multipart/form-data' },
     })
     return res.data.data
   },

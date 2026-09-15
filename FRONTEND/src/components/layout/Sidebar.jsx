@@ -2,13 +2,9 @@ import React from 'react'
 import { NavLink } from 'react-router-dom'
 
 const navItems = [
-  { path: '/', label: 'Overview Dashboard', icon: '📊' },
-  { path: '/departments', label: 'Department Analysis', icon: '🏢' },
-  { path: '/courses', label: 'Course Analysis', icon: '📚' },
-  { path: '/sessions', label: 'Session & Trends', icon: '📈' },
-  { path: '/modes', label: 'Exam Mode (On/Off)', icon: '💻' },
-  { path: '/input', label: 'Data Input & Bulk Upload', icon: '📥' },
-  { path: '/reports', label: 'Reports & Export', icon: '📑' },
+  { path: '/input', label: 'Upload & Inspect', icon: '📥' },
+  { path: '/results', label: 'Results Browser', icon: '📋' },
+  { path: '/', label: 'Analysis Dashboard', icon: '📊' },
 ]
 
 export default function Sidebar() {
@@ -41,7 +37,7 @@ export default function Sidebar() {
 
       <div className="mt-8 p-3 rounded-lg bg-slate-800/60 border border-slate-700 text-xs text-slate-400">
         <p className="font-semibold text-slate-200 mb-1">API Backend</p>
-        <p className="text-[11px]">Express SQL Engine</p>
+        <p className="text-[11px]">Express + SQLite Engine</p>
         <p className="text-[11px] text-slate-400 mt-1">Port: 5000 (Proxied via Vite)</p>
       </div>
     </aside>

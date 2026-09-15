@@ -3,12 +3,12 @@ import React, { createContext, useContext, useState } from 'react'
 const FilterContext = createContext(null)
 
 const initialFilters = {
-  academic_year: '',
-  semester: '',
-  department_id: '',
-  course_id: '',
-  subject_id: '',
-  session_id: '',
+  degree_code: '',
+  curr_sems: '',
+  type_code: '',
+  status_code: '',
+  regn_numb: '',
+  subject_code: '',
 }
 
 export function FilterProvider({ children }) {

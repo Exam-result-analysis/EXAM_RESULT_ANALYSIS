@@ -4,16 +4,16 @@ import OverallPassChart from './OverallPassChart'
 import ResultSummary from './ResultSummary'
 import DepartmentResults from './DepartmentResults'
 import dashboardService from '../../services/dashboardService'
-import reportService from '../../services/reportService'
 import Loader from '../../components/ui/Loader'
 import Button from '../../components/ui/Button'
 import './dashboard.css'
 
 export default function Dashboard() {
   const [filters, setFilters] = useState({
-    semester: '',
-    academic_year: '',
-    department_id: '',
+    degree_code: '',
+    curr_sems: '',
+    type_code: '',
+    status_code: '',
   })
 
   const [loading, setLoading] = useState(true)
@@ -26,11 +26,11 @@ export default function Dashboard() {
     setLoading(true)
     setError(null)
     try {
-      // Build clean query params omitting empty values
       const params = {}
-      if (filters.semester) params.semester = filters.semester
-      if (filters.academic_year) params.academic_year = filters.academic_year
-      if (filters.department_id) params.department_id = filters.department_id
+      if (filters.degree_code) params.degree_code = filters.degree_code
+      if (filters.curr_sems) params.curr_sems = filters.curr_sems
+      if (filters.type_code) params.type_code = filters.type_code
+      if (filters.status_code) params.status_code = filters.status_code
 
       const [overall, depts, sess] = await Promise.all([
         dashboardService.getOverallAnalysis(params),
@@ -52,11 +52,6 @@ export default function Dashboard() {
     loadData()
   }, [loadData])
 
-  const handleExport = () => {
-    if (!departmentsData.length) return
-    reportService.exportToCsv(departmentsData, 'department_performance_report.csv')
-  }
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -65,67 +60,69 @@ export default function Dashboard() {
           <p className="text-xs font-bold uppercase tracking-wider text-blue-600">
             Institutional Analytics
           </p>
-          <h1 className="text-2xl font-bold text-gray-900 mt-0.5">Results Overview</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mt-0.5">Analysis Dashboard</h1>
           <p className="text-xs text-gray-500 mt-1">
-            Real-time examination performance indicators and breakdown.
+            Real-time examination performance indicators and breakdown from committed data.
           </p>
         </div>
         <div className="flex items-center gap-3">
           <Button variant="secondary" size="sm" onClick={loadData} disabled={loading}>
             🔄 Refresh
           </Button>
-          <Button variant="primary" size="sm" onClick={handleExport} disabled={!departmentsData.length}>
-            ⇩ Export CSV
-          </Button>
         </div>
       </div>
 
       {/* Filter Bar */}
-      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div>
           <label className="text-xs font-semibold text-gray-600 block mb-1">Semester</label>
           <select
-            value={filters.semester}
-            onChange={(e) => setFilters({ ...filters, semester: e.target.value })}
+            value={filters.curr_sems}
+            onChange={(e) => setFilters({ ...filters, curr_sems: e.target.value })}
             className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 bg-white focus:outline-none focus:border-blue-500"
           >
             <option value="">All Semesters</option>
-            <option value="1">Semester 1</option>
-            <option value="2">Semester 2</option>
-            <option value="3">Semester 3</option>
-            <option value="4">Semester 4</option>
-            <option value="5">Semester 5</option>
-            <option value="6">Semester 6</option>
-            <option value="7">Semester 7</option>
-            <option value="8">Semester 8</option>
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+              <option key={s} value={s}>Semester {s}</option>
+            ))}
           </select>
         </div>
 
         <div>
-          <label className="text-xs font-semibold text-gray-600 block mb-1">Academic Year</label>
+          <label className="text-xs font-semibold text-gray-600 block mb-1">Degree Code</label>
+          <input
+            type="text"
+            value={filters.degree_code}
+            onChange={(e) => setFilters({ ...filters, degree_code: e.target.value })}
+            placeholder="e.g. 159"
+            className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 bg-white focus:outline-none focus:border-blue-500"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold text-gray-600 block mb-1">Exam Type</label>
           <select
-            value={filters.academic_year}
-            onChange={(e) => setFilters({ ...filters, academic_year: e.target.value })}
+            value={filters.type_code}
+            onChange={(e) => setFilters({ ...filters, type_code: e.target.value })}
             className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 bg-white focus:outline-none focus:border-blue-500"
           >
-            <option value="">All Academic Years</option>
-            <option value="2023-24">2023-24</option>
-            <option value="2024-25">2024-25</option>
+            <option value="">All Types</option>
+            <option value="CT">CT — Regular</option>
+            <option value="SE">SE — Supplementary</option>
           </select>
         </div>
 
         <div>
-          <label className="text-xs font-semibold text-gray-600 block mb-1">Department</label>
+          <label className="text-xs font-semibold text-gray-600 block mb-1">Status</label>
           <select
-            value={filters.department_id}
-            onChange={(e) => setFilters({ ...filters, department_id: e.target.value })}
+            value={filters.status_code}
+            onChange={(e) => setFilters({ ...filters, status_code: e.target.value })}
             className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 bg-white focus:outline-none focus:border-blue-500"
           >
-            <option value="">All Departments</option>
-            <option value="1">Computer Science & Engineering</option>
-            <option value="2">Electronics & Communication Engineering</option>
-            <option value="3">Electrical & Electronics Engineering</option>
-            <option value="4">Mechanical Engineering</option>
+            <option value="">All Statuses</option>
+            <option value="PASS">PASS</option>
+            <option value="FAIL">FAIL</option>
+            <option value="CANCELLED">CANCELLED</option>
           </select>
         </div>
       </div>
