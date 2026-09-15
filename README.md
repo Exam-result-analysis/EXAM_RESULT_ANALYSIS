@@ -1,91 +1,152 @@
-<<<<<<< HEAD
-# Exam Result Analysis System (Backend REST API)
+# 📊 Exam Result Analysis System
 
-A robust, production-grade REST API backend for Exam Result Analysis built with **Node.js**, **Express**, **SQLite** (`better-sqlite3`), and **JWT Authentication**.
+A full-stack **Exam Result Analysis Platform** for institutional exam data — upload Excel spreadsheets, get instant analytical insights, and manage results in a normalized database.
 
----
-
-## Features
-- **Master Data Models**: Departments, Courses, Subjects, Students, Academic Sessions, Examination Modes, and Exams.
-- **Fact Table Analytics**: All percentage calculations and analytical metrics computed directly in SQL queries with zero client-side recalculation.
-  - Formula: \(\text{Pass \%} = \frac{\text{Passed}}{\text{Passed} + \text{Failed}} \times 100\) (excluding `CANCELLED` results, guarded by `NULLIF`).
-- **7 Analytical Dimensions**:
-  1. `GET /api/analysis/overall` — System-wide summary (total students, departments, courses, subjects, pass/fail counts, overall pass %).
-  2. `GET /api/analysis/department` — Department-wise pass percentage rankings and student distributions.
-  3. `GET /api/analysis/course` — Course-level breakdown with optional `department_id` filtering.
-  4. `GET /api/analysis/session` — Longitudinal pass % trends across academic sessions and semesters.
-  5. `GET /api/analysis/mode` — Comparative performance analysis for `ONLINE` vs `OFFLINE` exam modes.
-  6. `GET /api/analysis/subject` — Subject performance metrics (average, highest, lowest marks, total appeared, pass %).
-  7. `GET /api/analysis/student` — Comprehensive individual student drill-down with KPI summary and semester mark sheet.
-- **JWT Authentication & RBAC**:
-  - Secure bcrypt password hashing.
-  - Stateless JWT token issuance and `authMiddleware`.
-  - Roles: `admin`, `faculty`, `student`.
-  - Seeded test accounts:
-    - Admin: `admin@example.com` / `Password123!`
-    - Faculty: `faculty@example.com` / `Password123!`
-    - Student: `student@example.com` / `Password123!`
-- **Result CRUD API**:
-  - `GET /api/results` (with pagination, filters)
-  - `GET /api/results/:id`
-  - `POST /api/results` (auto-calculates total marks, grade, status)
-  - `DELETE /api/results/:id`
-- **Zero External Infrastructure**: Runs standalone with SQLite out of the box.
+Built with **React + Vite** (frontend) and **Node.js + Express + SQLite** (backend).
 
 ---
 
-## Getting Started
+## ✨ Key Features
 
-### 1. Installation
+### 📥 Excel Upload & Inspect (Primary Feature)
+Upload any institutional exam result spreadsheet (`.xlsx`, `.xls`, `.csv`) and instantly get:
+- **File Metadata** — filename, sheet name, total records, unique students, subjects, degrees, semesters, exam types detected
+- **Performance Summary** — overall pass %, passed/failed/cancelled counts, average internal/external/total marks, highest & lowest scores
+- **Subject-wise Breakdown** — per-subject pass %, average marks, highest/lowest with visual progress bars
+- **Data Preview** — first 100 sanitized records with grade calculation and status normalization
+- **One-click Commit** — persist analyzed data directly into the database
+
+### 📋 Results Browser
+- Paginated table of all committed exam results
+- Filter by registration number, subject code, degree code, or status
+- Edit/Delete individual records with auto-recalculation of grades
+
+### 📊 Analysis Dashboard
+- Overall institutional pass % and KPI cards
+- Department-wise performance rankings
+- Session trends and result summaries
+- Filterable by semester, degree code, exam type, and status
+
+### 🔒 Authentication & RBAC
+- JWT-based authentication with bcrypt password hashing
+- Three roles: `admin`, `faculty`, `student`
+- Seeded test accounts (see Backend README)
+
+---
+
+## 🏗️ Architecture
+
+```
+EXAM_RESULT_ANALYSIS/
+├── BACKEND/          # Express REST API + SQLite database
+│   ├── src/          # Routes, Controllers, Services, Middleware
+│   ├── database/     # Schema (3NF) + Seed script
+│   ├── data/         # Sample Excel/CSV/JSON datasets
+│   └── test/         # API verification suite
+│
+├── FRONTEND/         # React + Vite + Tailwind CSS
+│   ├── src/
+│   │   ├── pages/          # Upload & Inspect, Results Browser, Dashboard
+│   │   ├── components/     # Layout (Navbar, Sidebar), UI primitives
+│   │   ├── services/       # API client (axios)
+│   │   └── context/        # Auth & Filter state management
+│   └── vite.config.js      # Dev proxy to backend :5000
+```
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+- **Node.js** v18+ 
+- **npm** v9+
+
+### 1. Clone & Install
+
 ```bash
+git clone https://github.com/Exam-result-analysis/EXAM_RESULT_ANALYSIS.git
+cd EXAM_RESULT_ANALYSIS
+
+# Install backend dependencies
+cd BACKEND
+npm install
+
+# Install frontend dependencies
+cd ../FRONTEND
 npm install
 ```
 
-### 2. Database Setup & Seed
-Populate the database with test departments, courses, subjects, sessions, exam modes, 120 students, and ~960 results:
+### 2. Setup Database (Backend)
+
 ```bash
-npm run seed
+cd BACKEND
+npm run setup    # Creates SQLite DB, seeds 446 students, 4,338 results, 42 subjects
 ```
 
-### 3. Start the Server
-Development mode (with auto-reload):
+### 3. Start Both Servers
+
 ```bash
+# Terminal 1 — Backend (port 5000)
+cd BACKEND
+npm run dev
+
+# Terminal 2 — Frontend (port 5173, proxied to backend)
+cd FRONTEND
 npm run dev
 ```
 
-Production mode:
-```bash
-npm start
-```
-Server will be available at: `http://localhost:5000`
+### 4. Open the App
 
-### 4. Run Verification Suite
-```bash
-npm test
-```
+Navigate to **http://localhost:5173/input** to upload an Excel file and see the analysis.
 
 ---
 
-## API Endpoints Reference
+## 🌐 Backend API Reference
 
-### Authentication
-- `POST /api/auth/login` — `{ email, password }` -> `{ token, user }`
-- `POST /api/auth/register` — `{ email, password, role }` -> `{ token, user }`
-- `POST /api/auth/logout` — Discard session confirmation
-- `GET /api/auth/profile` — (Protected) Get authenticated user profile
+| Method | Endpoint | Description |
+| :---: | :--- | :--- |
+| `POST` | `/api/results/inspect-excel` | Upload & analyze Excel — returns insights + preview |
+| `POST` | `/api/results/inspect-excel?commit=true` | Analyze + commit data to database |
+| `POST` | `/api/results/upload` | Bulk upload results from Excel |
+| `GET` | `/api/results` | Paginated results (filters: `regn_numb`, `subject_code`, `degree_code`, `status_code`) |
+| `GET` | `/api/results/:id` | Get single result |
+| `POST` | `/api/results` | Create single result |
+| `PUT` | `/api/results/:id` | Update result (auto-recalculates grade) |
+| `DELETE` | `/api/results/:id` | Delete result |
+| `GET` | `/api/analysis/overall` | Institutional-wide KPIs |
+| `GET` | `/api/analysis/department` | Department rankings by pass % |
+| `GET` | `/api/analysis/subject` | Subject-level performance metrics |
+| `GET` | `/api/analysis/session` | Session trend analysis |
+| `GET` | `/api/analysis/mode` | Online vs Offline comparison |
+| `GET` | `/api/analysis/student?student_id=X` | Individual student drill-down |
+| `GET` | `/api/filters` | Available filter options |
+| `GET` | `/api/export/template` | Download Excel template |
+| `POST` | `/api/auth/login` | JWT authentication |
+| `POST` | `/api/auth/register` | User registration |
 
-### Analytical APIs
-- `GET /api/analysis/overall?academic_year=2023-24&semester=1`
-- `GET /api/analysis/department?academic_year=2023-24`
-- `GET /api/analysis/course?department_id=1`
-- `GET /api/analysis/session?course_id=1`
-- `GET /api/analysis/mode`
-- `GET /api/analysis/subject?course_id=1`
-- `GET /api/analysis/student?student_id=12321100001`
+---
 
-### Healthcheck
-- `GET /health` — Service status check
-=======
-# EXAM_RESULT_ANALYSIS
-Project for Data Science Open Elective Course
->>>>>>> 4a6fc1a5e9dca106983310988c9f7ced8f609b35
+## 🔑 Test Accounts
+
+| Role | Email | Password |
+|------|-------|----------|
+| Admin | `admin@example.com` | `Password123!` |
+| Faculty | `faculty@example.com` | `Password123!` |
+| Student | `student@example.com` | `Password123!` |
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 19, Vite 8, Tailwind CSS 4, Axios, Recharts |
+| Backend | Node.js, Express 4, SQLite (native), JWT, Multer, XLSX |
+| Database | SQLite with 3NF normalized schema |
+| Auth | bcryptjs + JSON Web Tokens |
+
+---
+
+## 📄 License
+
+This project is for the **Data Science Open Elective Course**.
