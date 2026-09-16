@@ -25,8 +25,6 @@ Physical study centers, printed course materials, and proctored examinations:
 - **MBA in Health Services Management** (Degree Code: `603`)
 - **MCA (ODL)** (Degree Code: `610`)
 - **M.Sc in Information Technology** (Degree Code: `620`)
-- **B.E. Distance Engineering**:
-  - Mechanical (`159`), Civil (`160`), EEE (`161`), ECE (`162`), CSE (`163`), IT (`164`)
 
 ---
 
@@ -36,14 +34,13 @@ Each branch contains semester-wise subject mappings featuring numerical `SUBJCOD
 - **MBA Programs**: `50011`–`50025` (`DBA5101`–`DBA5205`)
 - **MCA Programs**: `51011`–`51025` (`DCA5101`–`DCA5205`)
 - **M.Sc CS / IT**: `52011`–`52015` (`DCS5101`–`DCS5105`)
-- **B.E. Distance**: `20055`–`20106` (`OBA1101`–`OBA1206`)
 
 ---
 
 ## 📊 Sample Datasets Exported
 
 Pre-generated sample datasets are included:
-- `data/sample_exam_results.json` (4,338 records across 446 candidates)
+- `data/sample_exam_results.json` (3,200 records across 300 candidates)
 - `data/sample_exam_results.csv`
 - `data/sample_exam_results.xlsx`
 
@@ -87,14 +84,14 @@ All **66 end-to-end integration tests** verify authentication, analytical aggreg
 | `GET` | `/health` | Server health check |
 | `GET` | `/api/analysis/distance-branches` | All Online & Offline branches with subject codes |
 | `GET` | `/api/analysis/distance-branches?delivery_mode=ONLINE` | 7 Online Learning (OL) programs |
-| `GET` | `/api/analysis/distance-branches?delivery_mode=OFFLINE` | 11 Distance (ODL) programs |
+| `GET` | `/api/analysis/distance-branches?delivery_mode=OFFLINE` | 5 Distance (ODL) programs |
 | `GET` | `/api/analysis/overall` | Overall institutional pass % and student totals |
 | `GET` | `/api/analysis/department` | Branch rankings ordered by pass rate |
 | `GET` | `/api/analysis/course` | Course performance breakdown (passed vs failed) |
 | `GET` | `/api/analysis/subject` | Subject spectrum (averages, pass %) |
 | `GET` | `/api/analysis/session` | Longitudinal session pass % trendline |
 | `GET` | `/api/analysis/mode` | Online vs Offline comparative statistics |
-| `GET` | `/api/analysis/student?student_id=12321100062` | Candidate profile and mark sheet |
+| `GET` | `/api/analysis/student?student_id=20241010001` | Candidate profile and mark sheet |
 
 ### Excel Insights & Ingestion Engine
 | Method | Endpoint | Description |
