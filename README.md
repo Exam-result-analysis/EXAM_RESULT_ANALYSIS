@@ -95,7 +95,7 @@ cd FRONTEND
 npm run dev
 ```
 
-### 4. Open the App : 
+### 4.Open the App : 
 
 Navigate to **http://localhost:5173/input** to upload an Excel file and see the analysis.
 
