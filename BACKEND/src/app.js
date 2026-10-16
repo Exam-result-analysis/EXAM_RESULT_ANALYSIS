@@ -1,5 +1,6 @@
 // src/app.js
 const express = require('express');
+const { randomUUID } = require('crypto');
 const cors = require('cors');
 const helmet = require('helmet');
 const path = require('path');
@@ -23,9 +24,14 @@ app.use(helmet({
   contentSecurityPolicy: false,
 }));
 app.use(cors({ origin: config.corsOrigin === '*' ? true : config.corsOrigin }));
+app.use((req, res, next) => {
+  req.id = randomUUID();
+  res.setHeader('X-Request-Id', req.id);
+  next();
+});
+app.use(requestLogger);
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-app.use(requestLogger);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
