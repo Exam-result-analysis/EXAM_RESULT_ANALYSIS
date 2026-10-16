@@ -107,7 +107,12 @@ All **66 end-to-end integration tests** verify authentication, analytical aggreg
 ## 🔒 Authentication & CRUD
 - `POST /api/auth/register` — Register user (`faculty`, `admin`, `student`)
 - `POST /api/auth/login` — Authenticate and receive JWT token
+- `POST /api/auth/forgot-password` — Request password reset link / token
+- `POST /api/auth/verify-reset-token` — Validate password reset token
+- `POST /api/auth/reset-password` — Set new password using reset token
+- `GET /api/auth/reset-password/:token` — Redirect link from reset email
 - `GET /api/auth/profile` — View current authenticated user
+- `POST /api/auth/logout` — User logout
 - `GET /api/results` — Paginated exam results
 - `PUT /api/results/:id` — Update marks (with automatic recalculation)
 - `DELETE /api/results/:id` — Delete result record

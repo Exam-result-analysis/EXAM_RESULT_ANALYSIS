@@ -1,4 +1,4 @@
-﻿// src/service/ingest.service.js
+// src/service/ingest.service.js
 const { query } = require('../config/database');
 const ApiError = require('../utils/apiError');
 
@@ -26,7 +26,7 @@ async function ingestRawData(rawRows = []) {
     if (isNaN(regnNumb)) continue;
 
     const degreeCode = parseInt(
-      row.DEGRCODE || row.degree_code || row.degreeCode || row.department_id || 159,
+      row.DEGRCODE || row.degree_code || row.degreeCode || row.department_id || 501,
       10
     );
 
@@ -35,8 +35,8 @@ async function ingestRawData(rawRows = []) {
       10
     );
 
-    const typeCode = String(row.TYPE || row.type_code || row.typeCode || row.exam_type || 'CT').trim().toUpperCase();
-    const uniCode = String(row.UNIVERSITY || row.university_code || row.university || 'AUC').trim().toUpperCase();
+    const typeCode = String(row.TYPE || row.type_code || row.typeCode || row.exam_type || 'CT-OL').trim().toUpperCase();
+    const uniCode = String(row.UNIVERSITY || row.university_code || row.university || 'AUCDE').trim().toUpperCase();
     const systemCode = String(row.RESULT_SYSTEM || row.RESULT_SY || row.system_code || 'M').trim().toUpperCase();
 
     // 1. Sanitize Result Status (P -> PASS, F -> FAIL, CAN -> CANCELLED)
@@ -91,8 +91,8 @@ async function ingestRawData(rawRows = []) {
     }
 
     // 3. Ensure Subject
-    const subjCode = parseInt(row.SUBJCODE || row.subject_code || 20055, 10);
-    const subjUncode = String(row.SUBJUNCD || row.subject_uncode || `OBA${subjCode}`).trim();
+    const subjCode = parseInt(row.SUBJCODE || row.subject_code || 50011, 10);
+    const subjUncode = String(row.SUBJUNCD || row.subject_uncode || (subjCode === 50011 ? 'DBA5101' : `SUB${subjCode}`)).trim();
     const subjName = row.subject_name || row.SUBJNAME || `Subject ${subjCode}`;
 
     const subjCheck = await query('SELECT subject_code FROM subjects WHERE subject_code = ?', [subjCode]);

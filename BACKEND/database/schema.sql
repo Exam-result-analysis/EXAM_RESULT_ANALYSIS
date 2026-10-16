@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS exam_results (
   type_code     TEXT NOT NULL,
   status_code   TEXT NOT NULL,
   system_code   TEXT NOT NULL,
-  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (regn_numb, subject_code, curr_sems, type_code),
   FOREIGN KEY (regn_numb) REFERENCES students (regn_numb) ON DELETE CASCADE,
   FOREIGN KEY (subject_code) REFERENCES subjects (subject_code) ON DELETE CASCADE,
@@ -76,11 +76,13 @@ CREATE TABLE IF NOT EXISTS exam_results (
 
 -- 7. USERS (Authentication & Role-Based Access Control)
 CREATE TABLE IF NOT EXISTS users (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  email         TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
-  role          TEXT NOT NULL DEFAULT 'student' CHECK (role IN ('admin', 'faculty', 'student')),
-  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  email              TEXT UNIQUE NOT NULL,
+  password_hash      TEXT NOT NULL,
+  role               TEXT NOT NULL DEFAULT 'student' CHECK (role IN ('admin', 'faculty', 'student')),
+  reset_token        TEXT,
+  reset_token_expiry TIMESTAMP,
+  created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Performance Indexes

@@ -160,6 +160,20 @@ async function runTests() {
     assert(health.status === 200, 'GET /health returns 200');
     assert(health.body.success === true, 'GET /health returns success: true');
 
+    const missingRoute = await request('GET', '/api/no-such-route?token=private');
+    assert(missingRoute.status === 404, 'Unknown routes return 404');
+    assert(missingRoute.body.code === 'NOT_FOUND', 'Unknown routes use the standard error code');
+    assert(!missingRoute.body.message.includes('private'), 'Unknown route responses do not echo query parameters');
+    assert(Boolean(missingRoute.body.requestId) && Boolean(missingRoute.headers['x-request-id']), 'Errors include a request ID in the body and header');
+
+    const malformedJson = await request('POST', '/api/auth/login', {
+      headers: { 'Content-Type': 'application/json' },
+      body: '{',
+    });
+    assert(malformedJson.status === 400, 'Malformed JSON returns 400');
+    assert(malformedJson.body.code === 'INVALID_JSON', 'Malformed JSON uses the standard error code');
+    assert(!malformedJson.body.stack, 'Malformed JSON response does not expose a stack trace');
+
     // ----------------------------------------------------
     // 2. Authentication Tests
     // ----------------------------------------------------
@@ -188,6 +202,50 @@ async function runTests() {
     });
     assert(profile.status === 200, 'GET /api/auth/profile with Bearer token returns 200');
     assert(profile.body.data?.user?.email === regEmail || profile.body.data?.email === regEmail, 'Profile returns correct user email');
+
+    // Password Recovery Tests (Forgot Password & Reset)
+    const forgotNonExistent = await request('POST', '/api/auth/forgot-password', {
+      body: { email: 'nonexistent_user@example.com' },
+    });
+    assert(forgotNonExistent.status === 200, 'POST /api/auth/forgot-password returns 200 for nonexistent email');
+    assert(forgotNonExistent.body.message.includes('If an account exists'), 'Protects against account enumeration');
+
+    const forgotValid = await request('POST', '/api/auth/forgot-password', {
+      body: { email: regEmail },
+    });
+    assert(forgotValid.status === 200, 'POST /api/auth/forgot-password returns 200 for registered email');
+    const resetToken = forgotValid.body.data?.token;
+    assert(Boolean(resetToken), 'Forgot password issues reset token in test environment');
+
+    const verifyBadToken = await request('POST', '/api/auth/verify-reset-token', {
+      body: { token: 'invalid-fake-reset-token' },
+    });
+    assert(verifyBadToken.status === 400, 'POST /api/auth/verify-reset-token with bad token returns 400');
+
+    const verifyGoodToken = await request('POST', '/api/auth/verify-reset-token', {
+      body: { token: resetToken },
+    });
+    assert(verifyGoodToken.status === 200, 'POST /api/auth/verify-reset-token with valid token returns 200');
+
+    const resetShortPassword = await request('POST', '/api/auth/reset-password', {
+      body: { token: resetToken, newPassword: '123' },
+    });
+    assert(resetShortPassword.status === 400, 'Reset password rejects passwords shorter than 6 characters');
+
+    const resetGood = await request('POST', '/api/auth/reset-password', {
+      body: { token: resetToken, newPassword: 'NewPassword123!' },
+    });
+    assert(resetGood.status === 200, 'POST /api/auth/reset-password resets password successfully');
+
+    const loginOldPass = await request('POST', '/api/auth/login', {
+      body: { email: regEmail, password: 'Password123!' },
+    });
+    assert(loginOldPass.status === 401, 'Login with old password fails after reset');
+
+    const loginNewPass = await request('POST', '/api/auth/login', {
+      body: { email: regEmail, password: 'NewPassword123!' },
+    });
+    assert(loginNewPass.status === 200, 'Login with new password succeeds after reset');
 
     // ----------------------------------------------------
     // 3. Protected Route Tests
@@ -338,6 +396,16 @@ async function runTests() {
 
     const badDelete = await request('DELETE', '/api/results/abc');
     assert(badDelete.status === 400, 'Non-numeric ID returns 400');
+
+    const goodDelete = await request('DELETE', `/api/results/${firstResultId}`);
+    assert(goodDelete.status === 200, `DELETE /api/results/${firstResultId} returns 200`);
+    assert(goodDelete.body.success === true, 'Result successfully deleted');
+
+    const checkDeleted = await request('GET', `/api/results/${firstResultId}`);
+    assert(checkDeleted.status === 404, 'Deleted result returns 404 on subsequent lookup');
+
+    const deleteNonExistent = await request('DELETE', `/api/results/${firstResultId}`);
+    assert(deleteNonExistent.status === 404, 'Deleting nonexistent result returns 404');
 
     // ----------------------------------------------------
     // 8. Bulk Upload from Excel Spreadsheet
