@@ -23,17 +23,29 @@ try {
   }
 }
 
-// Auto-initialize schema if tables are not yet created
+// Auto-initialize schema if the main fact table has not been created.
+const check = query("SELECT count(*) as count FROM sqlite_master WHERE type='table' AND name='exam_results'");
+if (!check.rows[0] || check.rows[0].count === 0) {
+  const schemaPath = path.join(__dirname, '..', '..', 'database', 'schema.sql');
+  if (fs.existsSync(schemaPath)) {
+    db.exec(fs.readFileSync(schemaPath, 'utf8'));
+  }
+}
+
+// Ensure users table has reset_token and reset_token_expiry columns
 try {
-  const check = query(`SELECT count(*) as count FROM sqlite_master WHERE type='table' AND name='result'`);
-  if (!check.rows[0] || check.rows[0].count === 0) {
-    const schemaPath = path.join(__dirname, '..', '..', 'database', 'schema.sql');
-    if (fs.existsSync(schemaPath)) {
-      db.exec(fs.readFileSync(schemaPath, 'utf8'));
+  const userTableCheck = query("SELECT count(*) as count FROM sqlite_master WHERE type='table' AND name='users'");
+  if (userTableCheck.rows[0] && userTableCheck.rows[0].count > 0) {
+    const userColumns = query("PRAGMA table_info(users)").rows.map(c => c.name);
+    if (!userColumns.includes('reset_token')) {
+      db.exec("ALTER TABLE users ADD COLUMN reset_token TEXT");
+    }
+    if (!userColumns.includes('reset_token_expiry')) {
+      db.exec("ALTER TABLE users ADD COLUMN reset_token_expiry TIMESTAMP");
     }
   }
 } catch (e) {
-  // Ignore initial table check errors during setup
+  // Ignore migration error if already exists
 }
 
 /**
@@ -71,7 +83,6 @@ function query(sql, params = []) {
       };
     }
   } catch (err) {
-    console.error('Database query error:', err.message, '\nSQL:', sql);
     throw err;
   }
 }

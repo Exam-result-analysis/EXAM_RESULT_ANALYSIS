@@ -141,7 +141,7 @@ async function getResultById(resultId) {
 async function createResult(data) {
   const regnNumb = data.regn_numb || data.student_id;
   const subjCode = data.subject_code || data.subject_id;
-  const degCode = data.degree_code || data.course_id || 159;
+  const degCode = data.degree_code || data.course_id || 501;
   const currSems = data.curr_sems || data.semester || 1;
   const typeCode = data.type_code || 'CT';
   const sysCode = data.system_code || 'M';
@@ -333,7 +333,7 @@ async function deleteResult(resultId) {
 /**
  * Bulk upload results from Excel file buffer
  */
-async function uploadResults(fileBuffer, degreeCode = 159) {
+async function uploadResults(fileBuffer, degreeCode = 501) {
   let workbook;
   try {
     workbook = XLSX.read(fileBuffer, { type: 'buffer' });
@@ -384,8 +384,8 @@ async function uploadResults(fileBuffer, degreeCode = 159) {
 
     validCandidates.push({
       regnNumb,
-      subjCode: subjCode || 20055,
-      degCode: Number(row.DEGRCODE) || 159,
+      subjCode: subjCode || 50011,
+      degCode: Number(row.DEGRCODE) || 501,
       currSems: Number(row.CURRSEMS) || 1,
       intMark,
       extMark,
@@ -482,7 +482,7 @@ async function inspectExcelFile(fileBuffer, options = {}) {
       studentsSet.add(regnNumb);
     }
 
-    const degreeCode = parseInt(row.DEGRCODE || row.degree_code || row.degreeCode || 159, 10);
+    const degreeCode = parseInt(row.DEGRCODE || row.degree_code || row.degreeCode || 501, 10);
     degreesSet.add(degreeCode);
 
     const currSems = parseInt(row.CURRSEMS || row.curr_sems || row.currSems || row.semester || 1, 10);
@@ -491,8 +491,8 @@ async function inspectExcelFile(fileBuffer, options = {}) {
     const typeCode = String(row.TYPE || row.type_code || row.typeCode || 'CT').trim().toUpperCase();
     examTypesSet.add(typeCode);
 
-    const subjCode = parseInt(row.SUBJCODE || row.subject_code || row.subject_id || 20055, 10);
-    const subjUncode = String(row.SUBJUNCD || row.subject_uncode || `OBA${subjCode}`).trim();
+    const subjCode = parseInt(row.SUBJCODE || row.subject_code || row.subject_id || 50011, 10);
+    const subjUncode = String(row.SUBJUNCD || row.subject_uncode || (subjCode === 50011 ? 'DBA5101' : `SUB${subjCode}`)).trim();
     const subjName = row.SUBJNAME || row.subject_name || row.subjectName || `Subject ${subjCode}`;
 
     // Normalize status

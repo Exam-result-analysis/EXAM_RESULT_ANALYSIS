@@ -91,7 +91,7 @@ async function uploadResults(req, res, next) {
       throw new ApiError(400, 'Only Excel files (.xlsx or .xls) are supported.');
     }
 
-    const degreeCode = Number(req.body.degree_code) || 159;
+    const degreeCode = Number(req.body.degree_code) || 501;
     const data = await resultService.uploadResults(req.file.buffer, degreeCode);
     return success(res, 200, 'Bulk result upload processed successfully.', data);
   } catch (err) {
