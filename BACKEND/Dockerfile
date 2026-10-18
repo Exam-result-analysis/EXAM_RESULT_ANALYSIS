@@ -27,7 +27,8 @@ EXPOSE 5000
 
 ENV PORT=5000 \
     NODE_ENV=production \
-    DB_PATH=/app/exam_result_analysis.db
+    DB_PATH=/app/data/exam_result_analysis.db
 
 CMD ["npm", "start"]
+
 

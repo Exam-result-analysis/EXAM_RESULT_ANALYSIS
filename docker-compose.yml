@@ -12,9 +12,10 @@ services:
     environment:
       - PORT=5000
       - NODE_ENV=production
-      - DB_PATH=/app/exam_result_analysis.db
+      - DB_PATH=/app/data/exam_result_analysis.db
       - JWT_SECRET=production-secret-key-change-me
       - JWT_EXPIRES_IN=7d
       - CORS_ORIGIN=*
     volumes:
-      - ./BACKEND/exam_result_analysis.db:/app/exam_result_analysis.db
+      - ./BACKEND/data:/app/data
+

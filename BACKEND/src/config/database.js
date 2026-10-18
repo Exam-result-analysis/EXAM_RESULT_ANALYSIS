@@ -8,13 +8,22 @@ try {
   // 1. Try Node.js built-in SQLite (Node 22.5+)
   const { DatabaseSync } = require('node:sqlite');
   const dbPath = path.resolve(config.dbPath);
+  const dir = path.dirname(dbPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
   db = new DatabaseSync(dbPath);
   db.exec('PRAGMA foreign_keys = ON;');
 } catch (e) {
+  console.warn('[Database] Built-in node:sqlite failed:', e.message);
   // 2. Fallback to better-sqlite3 if available
   try {
     const Database = require('better-sqlite3');
     const dbPath = path.resolve(config.dbPath);
+    const dir = path.dirname(dbPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
     db = new Database(dbPath);
     db.pragma('foreign_keys = ON');
   } catch (err) {
