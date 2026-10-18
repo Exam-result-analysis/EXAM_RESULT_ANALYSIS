@@ -60,7 +60,17 @@ app.use('/api/export', exportRoutes);
 app.use('/api/filters', filterRoutes);
 app.use('/api/ingest', ingestRoutes);
 
-
+// Serve frontend static build in production container
+const frontendDistPath = path.join(__dirname, '..', 'public');
+if (fs.existsSync(frontendDistPath)) {
+  app.use(express.static(frontendDistPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/health')) {
+      return next();
+    }
+    res.sendFile(path.join(frontendDistPath, 'index.html'));
+  });
+}
 
 // Catch 404 and forward to error handler
 app.use(notFound);

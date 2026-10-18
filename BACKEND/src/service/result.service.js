@@ -667,6 +667,15 @@ async function inspectExcelFile(fileBuffer, options = {}) {
   };
 }
 
+/**
+ * Clear all exam results and student records
+ */
+async function clearAllResults() {
+  await query('DELETE FROM exam_results');
+  await query('DELETE FROM students');
+  return { success: true, message: 'All exam results and student records have been deleted.' };
+}
+
 module.exports = {
   calculateGrade,
   getAllResults,
@@ -674,6 +683,8 @@ module.exports = {
   createResult,
   updateResult,
   deleteResult,
+  clearAllResults,
   uploadResults,
   inspectExcelFile,
 };
+

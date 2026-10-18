@@ -130,12 +130,25 @@ async function inspectExcel(req, res, next) {
   }
 }
 
+/**
+ * DELETE /api/results/clear
+ */
+async function clearAll(req, res, next) {
+  try {
+    const data = await resultService.clearAllResults();
+    return success(res, 200, 'All exam results and student records cleared successfully', data);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   getAll,
   getById,
   create,
   updateResult,
   deleteResult,
+  clearAll,
   uploadResults,
   inspectExcel,
 };

@@ -48,6 +48,24 @@ try {
   // Ignore migration error if already exists
 }
 
+// Clean up predefined sample exam results and students once
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS _system_meta (k TEXT PRIMARY KEY, v TEXT);
+  `);
+  const metaCheck = query("SELECT v FROM _system_meta WHERE k = 'predefined_cleaned'");
+  if (!metaCheck.rows[0]) {
+    db.exec("PRAGMA foreign_keys = OFF;");
+    db.exec("DELETE FROM exam_results;");
+    db.exec("DELETE FROM students;");
+    db.exec("PRAGMA foreign_keys = ON;");
+    db.exec("INSERT OR REPLACE INTO _system_meta (k, v) VALUES ('predefined_cleaned', 'true');");
+    console.log('[Database] Predefined exam results and student records cleared successfully.');
+  }
+} catch (e) {
+  console.error('[Database] Failed to clear predefined data:', e.message);
+}
+
 /**
  * Universal query helper
  * - Converts PostgreSQL $1, $2 to SQLite ?

@@ -15,6 +15,7 @@ router.get('/', resultController.getAll);
 router.get('/:id', resultController.getById);
 router.post('/', resultController.create);
 router.put('/:id', resultController.updateResult);
+router.delete('/clear', resultController.clearAll);
 router.delete('/:id', resultController.deleteResult);
 router.post('/upload', upload.single('file'), resultController.uploadResults);
 router.post('/bulk', upload.single('file'), resultController.uploadResults);
