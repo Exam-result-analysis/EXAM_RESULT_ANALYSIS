@@ -174,7 +174,7 @@ Navigate to **http://localhost:5173**. You will be directed to `/login` to sign 
 
 ---
 
-## 📄 License
+## 📄 License 
 
 This project is for the **Data Science Open Elective Course**.
 
