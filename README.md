@@ -2,24 +2,52 @@
 
 A full-stack **Exam Result Analysis Platform** for institutional exam data — upload Excel spreadsheets, get instant analytical insights, and manage results in a normalized database.
 
-Built with  **React + Vite** (frontend) and **Node.js + Express + SQLite** (backend).
+Built with **React + Vite** (frontend) and **Node.js + Express + SQLite** (backend).
+
+---
+
+## 🐳 Run with Docker (Recommended - One Command)
+
+Run the entire application (both Frontend and Backend in a unified production container) with a single command:
+
+```bash
+docker compose up --build
+```
+
+*(To run in the background / detached mode: `docker compose up --build -d`)*
+
+### 🌐 Access URL
+- **Application URL:** [http://localhost:9090](http://localhost:9090)
+- **Backend API:** `http://localhost:9090/api`
+- **Health Check:** `http://localhost:9090/health`
+
+### 🛑 Stop Docker
+```bash
+docker compose down
+```
 
 ---
 
 ## ✨ Key Features
+
+### 🔒 Enforced Authentication & RBAC
+- **Strict Route Protection:** Direct access to dashboard/results routes redirects unauthenticated users to `/login`.
+- JWT-based authentication with bcrypt password hashing.
+- Three supported roles: `admin`, `faculty`, and `student`.
 
 ### 📥 Excel Upload & Inspect (Primary Feature)
 Upload any institutional exam result spreadsheet (`.xlsx`, `.xls`, `.csv`) and instantly get:
 - **File Metadata** — filename, sheet name, total records, unique students, subjects, degrees, semesters, exam types detected
 - **Performance Summary** — overall pass %, passed/failed/cancelled counts, average internal/external/total marks, highest & lowest scores
 - **Subject-wise Breakdown** — per-subject pass %, average marks, highest/lowest with visual progress bars
-- **Data Preview** — first 100 sanitized records with grade calculation and status normalization
+- **Data Preview** — sanitized records with automatic grade calculation and status normalization
 - **One-click Commit** — persist analyzed data directly into the database
 
 ### 📋 Results Browser
 - Paginated table of all committed exam results
 - Filter by registration number, subject code, degree code, or status
 - Edit/Delete individual records with auto-recalculation of grades
+- Clear database action to reset data when needed
 
 ### 📊 Analysis Dashboard
 - Overall institutional pass % and KPI cards
@@ -27,46 +55,40 @@ Upload any institutional exam result spreadsheet (`.xlsx`, `.xls`, `.csv`) and i
 - Session trends and result summaries
 - Filterable by semester, degree code, exam type, and status
 
-### 🔒 Authentication & RBAC
-- JWT-based authentication with bcrypt password hashing
-- Three roles: `admin`, `faculty`, `student`
-- Seeded test accounts (see Backend README)
-
 ---
 
 ## 🏗️ Architecture
 
 ```
 EXAM_RESULT_ANALYSIS/
-├── BACKEND/          # Express REST API + SQLite database
-│   ├── src/          # Routes, Controllers, Services, Middleware
-│   ├── database/     # Schema (3NF) + Seed script
-│   ├── data/         # Sample Excel/CSV/JSON datasets
-│   └── test/         # API verification suite
+├── docker-compose.yml   # Single-container production Docker compose (port 9090)
+├── BACKEND/             # Express REST API + SQLite database
+│   ├── Dockerfile       # Multi-stage Dockerfile (builds React & packages Express)
+│   ├── src/             # Routes, Controllers, Services, Middleware
+│   ├── database/        # Schema (3NF) + Seed script
+│   ├── data/            # Sample datasets
+│   └── scripts/         # DB setup and migration scripts
 │
-├── FRONTEND/         # React + Vite + Tailwind CSS
+├── FRONTEND/            # React + Vite + Tailwind CSS
 │   ├── src/
-│   │   ├── pages/          # Upload & Inspect, Results Browser, Dashboard
-│   │   ├── components/     # Layout (Navbar, Sidebar), UI primitives
-│   │   ├── services/       # API client (axios)
-│   │   └── context/        # Auth & Filter state management
-│   └── vite.config.js      # Dev proxy to backend :5000
+│   │   ├── pages/       # Login, Upload & Inspect, Results Browser, Dashboard
+│   │   ├── components/  # Layout (Navbar, Sidebar), UI primitives
+│   │   ├── services/    # API client (axios)
+│   │   └── context/     # Auth & Filter state management
+│   └── vite.config.js   # Dev proxy to backend :5000
 ```
 
 ---
 
-## 🚀 Quick Start
+## 💻 Local Development (Without Docker)
 
 ### Prerequisites
 - **Node.js** v18+ 
 - **npm** v9+
 
-### 1. Clone & Install
+### 1. Install Dependencies
 
 ```bash
-git clone https://github.com/Exam-result-analysis/EXAM_RESULT_ANALYSIS.git
-cd EXAM_RESULT_ANALYSIS
-
 # Install backend dependencies
 cd BACKEND
 npm install
@@ -76,11 +98,11 @@ cd ../FRONTEND
 npm install
 ```
 
-### 2. Setup Database (Backend)
+### 2. Setup Database (Optional)
 
 ```bash
 cd BACKEND
-npm run setup    # Creates SQLite DB, seeds 446 students, 4,338 results, 42 subjects
+npm run setup    # Creates SQLite DB schema and sets up tables
 ```
 
 ### 3. Start Both Servers
@@ -95,9 +117,21 @@ cd FRONTEND
 npm run dev
 ```
 
-### 4.Open the App: 
+### 4. Open the App:
 
-Navigate to **http://localhost:5173/input** to upload an Excel file and see the analysis.
+Navigate to **http://localhost:5173**. You will be directed to `/login` to sign in.
+
+---
+
+## 🔑 Test Accounts
+
+| Role | Email | Password |
+|:---|:---|:---|
+| **Admin** | `admin@example.com` | `Password123!` |
+| **Faculty** | `faculty@example.com` | `Password123!` |
+| **Student** | `student@example.com` | `Password123!` |
+
+*(Quick demo buttons are also provided on the login page for convenience)*
 
 ---
 
@@ -105,6 +139,9 @@ Navigate to **http://localhost:5173/input** to upload an Excel file and see the 
 
 | Method | Endpoint | Description |
 | :---: | :--- | :--- |
+| `POST` | `/api/auth/login` | Authenticate user & receive JWT |
+| `POST` | `/api/auth/register` | Register new user account |
+| `GET` | `/api/auth/profile` | Get logged-in user profile |
 | `POST` | `/api/results/inspect-excel` | Upload & analyze Excel — returns insights + preview |
 | `POST` | `/api/results/inspect-excel?commit=true` | Analyze + commit data to database |
 | `POST` | `/api/results/upload` | Bulk upload results from Excel |
@@ -113,6 +150,7 @@ Navigate to **http://localhost:5173/input** to upload an Excel file and see the 
 | `POST` | `/api/results` | Create single result |
 | `PUT` | `/api/results/:id` | Update result (auto-recalculates grade) |
 | `DELETE` | `/api/results/:id` | Delete result |
+| `DELETE` | `/api/results/clear` | Clear all committed results and student records |
 | `GET` | `/api/analysis/overall` | Institutional-wide KPIs |
 | `GET` | `/api/analysis/department` | Department rankings by pass % |
 | `GET` | `/api/analysis/subject` | Subject-level performance metrics |
@@ -121,32 +159,22 @@ Navigate to **http://localhost:5173/input** to upload an Excel file and see the 
 | `GET` | `/api/analysis/student?student_id=X` | Individual student drill-down |
 | `GET` | `/api/filters` | Available filter options |
 | `GET` | `/api/export/template` | Download Excel template |
-| `POST` | `/api/auth/login` | JWT authentication |
-| `POST` | `/api/auth/register` | User registration |
-
----
-
-## 🔑 Test Accounts
-
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | `admin@example.com` | `Password123!` |
-| Faculty | `faculty@example.com` | `Password123!` |
-| Student | `student@example.com` | `Password123!` |
 
 ---
 
 ## 🛠️ Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
-| Frontend | React 19, Vite 8, Tailwind CSS 4, Axios, Recharts |
-| Backend | Node.js, Express 4, SQLite (native), JWT, Multer, XLSX |
-| Database | SQLite with 3NF normalized schema |
-| Auth | bcryptjs + JSON Web Tokens |
+|---|---|
+| **Frontend** | React 19, Vite 8, Tailwind CSS, Axios, Recharts, React Router 7 |
+| **Backend** | Node.js, Express 4, SQLite (native), JWT, Multer, XLSX |
+| **Database** | SQLite with 3NF normalized schema |
+| **Containerization** | Docker, Docker Compose (Multi-stage unified build) |
+| **Auth** | bcryptjs + JSON Web Tokens |
 
 ---
 
 ## 📄 License
 
 This project is for the **Data Science Open Elective Course**.
+
