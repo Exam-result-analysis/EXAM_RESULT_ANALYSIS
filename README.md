@@ -2,7 +2,7 @@
 
 A full-stack **Exam Result Analysis Platform** for institutional exam data — upload Excel spreadsheets, get instant analytical insights, and manage results in a normalized database.
 
-Built with **React + Vite** (frontend) and **Node.js + Express + SQLite** (backend).
+Built with  **React + Vite** (frontend) and **Node.js + Express + SQLite** (backend).
 
 ---
 
