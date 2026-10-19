@@ -82,6 +82,21 @@ try {
   // Ignore if error
 }
 
+// Ensure default administrator account exists with default password (admin123)
+try {
+  const bcrypt = require('bcryptjs');
+  const adminCheck = query("SELECT id, password_hash, role FROM users WHERE email = 'admin@example.com'");
+  const defaultAdminHash = bcrypt.hashSync('admin123', 10);
+  if (!adminCheck.rows[0]) {
+    query("INSERT INTO users (email, password_hash, role) VALUES ('admin@example.com', ?, 'admin')", [defaultAdminHash]);
+    console.log('[Database] Default admin user initialized (admin@example.com / admin123)');
+  } else if (adminCheck.rows[0].role !== 'admin') {
+    query("UPDATE users SET role = 'admin' WHERE email = 'admin@example.com'");
+  }
+} catch (e) {
+  // Ignore if users table not yet ready or error
+}
+
 // Clean up predefined sample exam results and students once
 try {
   db.exec(`
