@@ -93,3 +93,24 @@ CREATE INDEX IF NOT EXISTS idx_exam_results_status  ON exam_results (status_code
 CREATE INDEX IF NOT EXISTS idx_exam_results_sems    ON exam_results (curr_sems);
 CREATE INDEX IF NOT EXISTS idx_exam_results_type    ON exam_results (type_code);
 CREATE INDEX IF NOT EXISTS idx_exam_results_comp    ON exam_results (degree_code, curr_sems, status_code);
+
+-- 8. STANDARD LOOKUP SEED VALUES
+INSERT OR IGNORE INTO result_statuses (status_code, description) VALUES
+  ('PASS', 'Pass'),
+  ('FAIL', 'Fail'),
+  ('CANCELLED', 'Cancelled'),
+  ('P', 'Pass'),
+  ('F', 'Fail'),
+  ('CAN', 'Cancelled'),
+  ('WH', 'Withheld'),
+  ('AB', 'Absent');
+
+INSERT OR IGNORE INTO exam_types (type_code, description) VALUES
+  ('CT-OL', 'Continuous Online Assessment'),
+  ('CT', 'Continuous Assessment'),
+  ('TEE', 'Term End Examination');
+
+INSERT OR IGNORE INTO result_systems (system_code, description) VALUES
+  ('M', 'Marks Based System'),
+  ('G', 'Grade Based System'),
+  ('C', 'Credit Based System');

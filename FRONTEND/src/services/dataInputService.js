@@ -18,7 +18,7 @@ export const dataInputService = {
 
     const res = await api.post('/results/inspect-excel', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 60000, // larger timeout for big files
+      timeout: 120000, // larger timeout for big files with commit
     })
     return res.data.data
   },

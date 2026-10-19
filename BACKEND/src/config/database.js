@@ -57,6 +57,31 @@ try {
   // Ignore migration error if already exists
 }
 
+// Ensure standard lookup values are seeded
+try {
+  db.exec(`
+    INSERT OR IGNORE INTO result_statuses (status_code, description) VALUES
+      ('PASS', 'Pass'),
+      ('FAIL', 'Fail'),
+      ('CANCELLED', 'Cancelled'),
+      ('P', 'Pass'),
+      ('F', 'Fail'),
+      ('CAN', 'Cancelled'),
+      ('WH', 'Withheld'),
+      ('AB', 'Absent');
+    INSERT OR IGNORE INTO exam_types (type_code, description) VALUES
+      ('CT-OL', 'Continuous Online Assessment'),
+      ('CT', 'Continuous Assessment'),
+      ('TEE', 'Term End Examination');
+    INSERT OR IGNORE INTO result_systems (system_code, description) VALUES
+      ('M', 'Marks Based System'),
+      ('G', 'Grade Based System'),
+      ('C', 'Credit Based System');
+  `);
+} catch (e) {
+  // Ignore if error
+}
+
 // Clean up predefined sample exam results and students once
 try {
   db.exec(`
