@@ -19,5 +19,6 @@ module.exports = {
   mode: handle(analysisService.mode),
   subject: handle(analysisService.subject),
   student: handle(analysisService.student),
+  students: handle(analysisService.students),
   distanceBranches: handle(analysisService.getDistanceBranches),
 };
