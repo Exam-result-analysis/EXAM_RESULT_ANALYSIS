@@ -4,7 +4,7 @@ React + Vite frontend for the Exam Result Analysis System. Provides a modern, re
 
 ---
 
-## 🧩 Pages
+## 🧩Pages
 
 ### 1. Upload & Inspect (`/input`)
 The primary page — drag-and-drop an Excel/CSV file to get instant analytics:
