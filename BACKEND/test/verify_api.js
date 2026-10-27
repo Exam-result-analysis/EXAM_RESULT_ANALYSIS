@@ -264,6 +264,19 @@ async function runTests() {
     });
     assert(withToken.status === 200, 'GET /api/protected with valid token returns 200');
 
+    const logoutWithoutToken = await request('POST', '/api/auth/logout');
+    assert(logoutWithoutToken.status === 401, 'POST /api/auth/logout without token returns 401');
+
+    const logout = await request('POST', '/api/auth/logout', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert(logout.status === 200, 'POST /api/auth/logout revokes the current token');
+
+    const revokedToken = await request('GET', '/api/protected', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert(revokedToken.status === 401, 'Revoked tokens cannot access protected routes');
+
     // ----------------------------------------------------
     // 4. Analytical APIs (Pure SQL Endpoints & Distance Education)
     // ----------------------------------------------------
@@ -272,13 +285,24 @@ async function runTests() {
     const overall = await request('GET', '/api/analysis/overall');
     assert(overall.status === 200, 'GET /api/analysis/overall returns 200');
     assert(Number(overall.body.data?.total_students) > 0, 'Overall analysis includes total_students');
-    assert(Number(overall.body.data?.overall_pass_percentage) > 0, 'Overall analysis includes pass %');
+    assert(overall.body.data?.passed_students !== undefined, 'Overall analysis includes passed_students');
+    assert(overall.body.data?.failed_students !== undefined, 'Overall analysis includes failed_students');
+    assert(overall.body.data?.overall_pass_percentage !== undefined, 'Overall analysis includes overall_pass_percentage');
+    assert(overall.body.data?.overall_fail_percentage !== undefined, 'Overall analysis includes overall_fail_percentage');
+    assert(
+      Math.abs(Number(overall.body.data?.overall_pass_percentage) + Number(overall.body.data?.overall_fail_percentage) - 100) < 0.1,
+      'Overall pass % + fail % sum to 100%'
+    );
 
     const dept = await request('GET', '/api/analysis/department');
     assert(dept.status === 200, 'GET /api/analysis/department returns list');
+    assert(dept.body.data?.[0]?.degree_pass_percentage !== undefined, 'Department analysis includes degree_pass_percentage');
+    assert(dept.body.data?.[0]?.degree_fail_percentage !== undefined, 'Department analysis includes degree_fail_percentage');
 
     const course = await request('GET', '/api/analysis/course');
     assert(course.status === 200, 'GET /api/analysis/course returns list');
+    assert(course.body.data?.[0]?.degree_pass_percentage !== undefined, 'Course analysis includes degree_pass_percentage');
+    assert(course.body.data?.[0]?.degree_fail_percentage !== undefined, 'Course analysis includes degree_fail_percentage');
 
     const session = await request('GET', '/api/analysis/session');
     assert(session.status === 200, 'GET /api/analysis/session returns list');
@@ -292,6 +316,16 @@ async function runTests() {
     const studentDrill = await request('GET', '/api/analysis/student?student_id=20241010001');
     assert(studentDrill.status === 200, 'GET /api/analysis/student returns 200');
     assert(Number(studentDrill.body.data?.student?.regn_numb) === 20241010001, 'Drilldown returns requested student');
+    assert(Boolean(studentDrill.body.data?.student?.student_status), 'Student drilldown includes student_status');
+    assert(studentDrill.body.data?.student?.is_passed !== undefined, 'Student drilldown includes is_passed');
+    assert(Boolean(studentDrill.body.data?.summary?.status_description), 'Student drilldown summary includes status_description');
+
+    const studentList = await request('GET', '/api/analysis/students?limit=10');
+    assert(studentList.status === 200, 'GET /api/analysis/students returns 200');
+    assert(Array.isArray(studentList.body.data?.students), 'Student list returns students array');
+    assert(studentList.body.data?.students?.length > 0, 'Student list contains students');
+    assert(Boolean(studentList.body.data?.students[0]?.student_status), 'Student list items include student_status');
+    assert(studentList.body.data?.students[0]?.is_passed !== undefined, 'Student list items include is_passed');
 
     // Distance Education Branches & Curriculum Matrix (Online & Offline)
     const distanceBranchesAll = await request('GET', '/api/analysis/distance-branches');

@@ -62,6 +62,13 @@ async function generateExport(moduleName, type = 'csv', options = {}) {
       filenamePrefix = `student_transcript_${studentId}`;
       break;
     }
+    case 'students':
+    case 'student-evaluations': {
+      const studentEvalResult = await analysisService.students({ ...options, limit: 10000 });
+      data = studentEvalResult.students;
+      filenamePrefix = 'students_pass_fail_evaluations';
+      break;
+    }
     default:
       throw new ApiError(400, `Unsupported module '${moduleName}' for export.`);
   }
