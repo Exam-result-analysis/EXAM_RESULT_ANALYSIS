@@ -6,23 +6,24 @@ export default function StatCards({ data = {} }) {
     total_departments = 0,
     total_courses = 0,
     total_subjects = 0,
-    total_passed = 0,
-    total_failed = 0,
     overall_pass_percentage = 0,
   } = data
+
+  const passedStudents = Number(data.passed_students ?? data.total_passed ?? 0)
+  const failedStudents = Number(data.failed_students ?? data.total_failed ?? 0)
 
   const stats = [
     {
       label: 'Total Students',
       value: Number(total_students).toLocaleString(),
-      note: 'Enrolled across all programs',
+      note: 'Evaluated across programs',
       icon: '👥',
       color: 'bg-blue-50 text-blue-700 border-blue-200',
     },
     {
-      label: 'Overall Pass %',
+      label: 'Student Pass Rate',
       value: `${overall_pass_percentage}%`,
-      note: `${total_passed} passed / ${total_failed} failed`,
+      note: `${passedStudents.toLocaleString()} passed all / ${failedStudents.toLocaleString()} failed`,
       icon: '🎯',
       color: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     },

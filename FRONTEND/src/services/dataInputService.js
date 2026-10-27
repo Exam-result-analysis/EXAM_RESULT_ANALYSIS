@@ -90,6 +90,15 @@ export const dataInputService = {
     })
     return res.data.data
   },
+
+  /**
+   * Clear all exam results and student records from database
+   * Backend: DELETE /api/results/clear
+   */
+  async clearAllResults() {
+    const res = await api.delete('/results/clear')
+    return res.data
+  },
 }
 
 export default dataInputService

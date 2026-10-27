@@ -14,6 +14,7 @@ import {
   LabelList,
 } from 'recharts'
 import dashboardService from '../../services/dashboardService'
+import dataInputService from '../../services/dataInputService'
 import Loader from '../../components/ui/Loader'
 import Button from '../../components/ui/Button'
 import './dashboard.css'
@@ -26,10 +27,40 @@ export default function Dashboard() {
   })
 
   const [loading, setLoading] = useState(true)
+  const [clearing, setClearing] = useState(false)
+  const [actionMsg, setActionMsg] = useState(null)
   const [error, setError] = useState(null)
   const [subjectsData, setSubjectsData] = useState([])
   const [coursesData, setCoursesData] = useState([])
   const [modeData, setModeData] = useState([])
+
+  const handleClearDatabase = async () => {
+    if (
+      !window.confirm(
+        'Are you sure you want to delete ALL records from the database?\n\nThis will remove all stored exam results and student records. This action cannot be undone.'
+      )
+    ) {
+      return
+    }
+
+    setClearing(true)
+    setActionMsg(null)
+    try {
+      await dataInputService.clearAllResults()
+      setActionMsg({
+        type: 'success',
+        text: 'All examination records and student data have been permanently deleted.',
+      })
+      await loadData()
+    } catch (err) {
+      setActionMsg({
+        type: 'error',
+        text: err.message || 'Failed to clear database.',
+      })
+    } finally {
+      setClearing(false)
+    }
+  }
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -61,35 +92,8 @@ export default function Dashboard() {
   }, [loadData])
 
   // Process data for Chart: Online vs Offline Mode Pass Percentage Comparison
-  // Identified by subject uncode starting with 'OBA' for Online
+  // Identified by course / subject code starting with 'O' for Online, otherwise Offline
   const onlineOfflineComparisonData = (() => {
-    if (modeData && modeData.length > 0) {
-      return modeData.map((m) => {
-        const isOnline = m.mode?.toLowerCase() === 'online'
-        return {
-          name: isOnline ? 'Online Students' : 'Offline Students',
-          shortName: isOnline ? 'Online (OBA)' : 'Offline (Distance)',
-          mode: isOnline ? 'Online' : 'Offline',
-          passPercentage: Number(m.pass_percentage || 0),
-          totalStudents: Number(m.total_students || 0),
-          totalEvaluations: Number(m.total_evaluations || 0),
-          passedStudents: Number(m.passed_students || 0),
-          failedStudents: Number(m.failed_students || 0),
-          isBaseline: Boolean(m.is_baseline),
-          color: isOnline ? '#3B82F6' : '#10B981',
-          identifier: isOnline ? 'SUBJUNCD: OBA*' : 'SUBJUNCD: Non-OBA',
-        }
-      })
-    }
-
-    // Fallback directly from subject data if backend hasn't refreshed
-    const obaSubjects = subjectsData.filter((s) =>
-      String(s.subject_uncode || '').toUpperCase().startsWith('OBA')
-    )
-    const nonObaSubjects = subjectsData.filter(
-      (s) => !String(s.subject_uncode || '').toUpperCase().startsWith('OBA')
-    )
-
     const calcPass = (list) => {
       if (!list || list.length === 0) return 0
       const totalPassed = list.reduce(
@@ -101,35 +105,81 @@ export default function Dashboard() {
       return totalAppeared > 0 ? Number(((totalPassed / totalAppeared) * 100).toFixed(2)) : 0
     }
 
-    const onlinePass = obaSubjects.length > 0 ? calcPass(obaSubjects) : 75.35
-    const offlinePass = nonObaSubjects.length > 0 ? calcPass(nonObaSubjects) : 68.57
+    const onlineFound = modeData.find(
+      (m) =>
+        m.mode?.toLowerCase() === 'online' ||
+        String(m.mode_name || m.type_code || '').toLowerCase() === 'online' ||
+        String(m.subject_uncode || m.course_code || m.code || '').toUpperCase().startsWith('O')
+    )
+    const offlineFound = modeData.find(
+      (m) =>
+        m.mode?.toLowerCase() === 'offline' ||
+        String(m.mode_name || m.type_code || '').toLowerCase() === 'offline' ||
+        (m.mode &&
+          m.mode.toLowerCase() !== 'online' &&
+          !String(m.subject_uncode || m.course_code || '').toUpperCase().startsWith('O'))
+    )
+
+    // Fallback directly from subject data if backend hasn't refreshed
+    const isOnlineSubject = (s) =>
+      String(s.subject_uncode || s.course_code || s.subject_code || s.code || '').trim().toUpperCase().startsWith('O')
+
+    const onlineSubjects = subjectsData.filter(isOnlineSubject)
+    const offlineSubjects = subjectsData.filter((s) => !isOnlineSubject(s))
+
+    const onlinePass = onlineFound
+      ? Number(onlineFound.pass_percentage || 0)
+      : onlineSubjects.length > 0 ? calcPass(onlineSubjects) : 0
+    const offlinePass = offlineFound
+      ? Number(offlineFound.pass_percentage || 0)
+      : offlineSubjects.length > 0 ? calcPass(offlineSubjects) : 0
+
+    const onlineTotal = onlineFound
+      ? Number(onlineFound.total_students || 0)
+      : onlineSubjects.length > 0 ? Number(onlineSubjects[0]?.total_appeared || 0) : 0
+    const onlinePassed = onlineFound
+      ? Number(onlineFound.passed_students || 0)
+      : Math.round((onlineTotal * onlinePass) / 100)
+    const onlineFailed = onlineFound
+      ? Number(onlineFound.failed_students || 0)
+      : onlineTotal - onlinePassed
+
+    const offlineTotal = offlineFound
+      ? Number(offlineFound.total_students || 0)
+      : offlineSubjects.length > 0 ? Number(offlineSubjects[0]?.total_appeared || 0) : 0
+    const offlinePassed = offlineFound
+      ? Number(offlineFound.passed_students || 0)
+      : Math.round((offlineTotal * offlinePass) / 100)
+    const offlineFailed = offlineFound
+      ? Number(offlineFound.failed_students || 0)
+      : offlineTotal - offlinePassed
 
     return [
       {
         name: 'Online Students',
-        shortName: 'Online (OBA)',
+        shortName: 'Online (O*)',
         mode: 'Online',
         passPercentage: onlinePass,
-        totalStudents: 106,
-        totalEvaluations: 1651,
-        passedStudents: Math.round((1651 * onlinePass) / 100),
-        failedStudents: 1651 - Math.round((1651 * onlinePass) / 100),
+        totalStudents: onlineTotal,
+        totalEvaluations: Number(onlineFound?.total_evaluations || (onlineSubjects.length * onlineTotal)),
+        passedStudents: onlinePassed,
+        failedStudents: onlineFailed,
         isBaseline: false,
         color: '#3B82F6',
-        identifier: 'SUBJUNCD starts with OBA',
+        identifier: 'Course starts with O',
       },
       {
         name: 'Offline Students',
-        shortName: 'Offline (Distance)',
+        shortName: 'Offline (Non-O*)',
         mode: 'Offline',
         passPercentage: offlinePass,
-        totalStudents: 125,
-        totalEvaluations: 1980,
-        passedStudents: Math.round((1980 * offlinePass) / 100),
-        failedStudents: 1980 - Math.round((1980 * offlinePass) / 100),
-        isBaseline: nonObaSubjects.length === 0,
+        totalStudents: offlineTotal,
+        totalEvaluations: Number(offlineFound?.total_evaluations || (offlineSubjects.length * offlineTotal)),
+        passedStudents: offlinePassed,
+        failedStudents: offlineFailed,
+        isBaseline: offlineTotal === 0,
         color: '#10B981',
-        identifier: 'Distance Education Baseline',
+        identifier: 'Course starts with Non-O',
       },
     ]
   })()
@@ -202,11 +252,38 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="secondary" size="sm" onClick={loadData} disabled={loading}>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={handleClearDatabase}
+            disabled={loading || clearing}
+          >
+            {clearing ? '⏳ Deleting Records...' : '🗑️ Delete All Records'}
+          </Button>
+          <Button variant="secondary" size="sm" onClick={loadData} disabled={loading || clearing}>
             🔄 Refresh
           </Button>
         </div>
       </div>
+
+      {/* Action status message */}
+      {actionMsg && (
+        <div
+          className={`p-4 rounded-xl text-sm flex items-center justify-between ${
+            actionMsg.type === 'success'
+              ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+              : 'bg-rose-50 border border-rose-200 text-rose-800'
+          }`}
+        >
+          <span>{actionMsg.text}</span>
+          <button
+            onClick={() => setActionMsg(null)}
+            className="text-xs font-bold text-gray-500 hover:text-gray-800 cursor-pointer ml-4"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -284,16 +361,16 @@ export default function Dashboard() {
                   </h3>
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
-                  Comparative analysis of Online learners (identified by subject codes starting with{' '}
-                  <span className="font-semibold text-blue-700 font-mono">OBA</span>) versus Offline distance learners.
+                  Comparative analysis of Online learners (identified by course codes starting with{' '}
+                  <span className="font-semibold text-blue-700 font-mono">O</span>) versus Offline distance learners.
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                  Online: SUBJUNCD (OBA*)
+                  Online: Course (O*)
                 </span>
                 <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  Offline: Distance Mode
+                  Offline: Course (Non-O*)
                 </span>
               </div>
             </div>
@@ -319,7 +396,7 @@ export default function Dashboard() {
                     />
                     <Tooltip
                       formatter={(val, name, props) => [
-                        `${val}% Pass Rate`,
+                        `${val}% Pass Rate (${props.payload.passedStudents} passed all subjects / ${props.payload.totalStudents} total students)`,
                         props.payload.name,
                       ]}
                       labelFormatter={(label) => label}
@@ -373,12 +450,27 @@ export default function Dashboard() {
                       <span className="text-3xl font-extrabold text-gray-900">
                         {item.passPercentage}%
                       </span>
-                      <span className="text-xs text-gray-500 font-medium">Passed Students</span>
+                      <span className="text-xs text-gray-500 font-medium">Student Pass Rate</span>
                     </div>
-                    <div className="mt-2 pt-2 border-t border-gray-200/60 flex items-center justify-between text-[11px] text-gray-600">
-                      <span>Evaluations: <strong>{item.totalEvaluations.toLocaleString()}</strong></span>
-                      <span>Passed: <strong className="text-emerald-700">{item.passedStudents.toLocaleString()}</strong></span>
-                      <span>Failed: <strong className="text-rose-600">{item.failedStudents.toLocaleString()}</strong></span>
+                    <div className="mt-3 pt-2.5 border-t border-gray-200/60 space-y-1.5 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600">Total Students:</span>
+                        <strong className="font-semibold text-gray-900">{item.totalStudents.toLocaleString()}</strong>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-emerald-700 font-medium">Passed (All Subjects):</span>
+                        <strong className="font-bold text-emerald-700">{item.passedStudents.toLocaleString()}</strong>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-rose-600 font-medium">Failed (1+ Arrears):</span>
+                        <strong className="font-bold text-rose-600">{item.failedStudents.toLocaleString()}</strong>
+                      </div>
+                      {item.totalEvaluations > 0 && (
+                        <div className="flex items-center justify-between text-[11px] text-gray-500 pt-1 border-t border-gray-100">
+                          <span>Evaluated Records:</span>
+                          <span>{item.totalEvaluations.toLocaleString()}</span>
+                        </div>
+                      )}
                     </div>
                     {item.isBaseline && (
                       <p className="text-[10px] text-emerald-800/80 mt-1 italic">
@@ -389,6 +481,19 @@ export default function Dashboard() {
                 ))}
 
                 {/* Insight banner */}
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600 space-y-1">
+                  <div>
+                    <span className="font-semibold text-slate-800">📊 Pass Criteria: </span>
+                    A student is marked <strong>Passed</strong> only if they cleared <strong>all subjects</strong>. Students with one or more arrears are counted as <strong>Failed</strong>.
+                  </div>
+                  {onlineOfflineComparisonData.some((d) => d.totalStudents > 0) && (
+                    <div className="pt-1 text-slate-700">
+                      <strong>Online (O*): </strong>
+                      {onlineOfflineComparisonData.find((d) => d.mode === 'Online')?.passedStudents || 0} passed,{' '}
+                      {onlineOfflineComparisonData.find((d) => d.mode === 'Online')?.failedStudents || 0} failed.
+                    </div>
+                  )}
+                </div>
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600">
                   <span className="font-semibold text-slate-800">📊 Cohort Comparison: </span>
                   Online learners achieved a{' '}

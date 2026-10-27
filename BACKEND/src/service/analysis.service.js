@@ -244,36 +244,47 @@ const session = async (options = {}) => {
   return result.rows;
 };
 
-// 5. Mode / Exam Type (Continuous Test vs End Sem) analysis API
+// 5. Mode / Delivery Mode (Online vs Offline) analysis API
+// A course/subject is Online if its code starts with 'O', otherwise Offline.
+// A student is marked Passed ONLY if they passed ALL applicable subjects.
 const mode = async (options = {}) => {
   const { where, values } = buildFilters(options);
   const result = await query(
     `WITH student_mode_eval AS (
        SELECT
          er.regn_numb,
-         er.type_code,
-         COALESCE(et.description, er.type_code) AS mode_name,
+         CASE
+           WHEN UPPER(TRIM(COALESCE(sub.subject_uncode, ''))) LIKE 'O%' THEN 'Online'
+           ELSE 'Offline'
+         END AS mode,
          COUNT(er.result_id) AS total_subjects,
-         COUNT(CASE WHEN er.status_code NOT IN ('PASS', 'P') THEN 1 END) AS failed_subjects
+         COUNT(CASE WHEN er.status_code NOT IN ('PASS', 'P') THEN 1 END) AS failed_subjects,
+         COUNT(er.result_id) AS total_evaluations
        ${commonJoins}
        ${where}
-       GROUP BY er.regn_numb, er.type_code, et.description
+       GROUP BY er.regn_numb, mode
      )
      SELECT
-       type_code,
-       mode_name,
+       mode,
+       mode                              AS type_code,
+       mode                              AS mode_name,
+       CASE WHEN mode = 'Online' THEN 'Online Students' ELSE 'Offline Students' END AS name,
+       CASE WHEN mode = 'Online' THEN 'Online (O*)' ELSE 'Offline (Non-O*)' END AS short_name,
        COUNT(regn_numb)                  AS total_students,
+       SUM(total_evaluations)            AS total_evaluations,
        COUNT(CASE WHEN failed_subjects = 0 AND total_subjects > 0 THEN 1 END) AS passed_students,
        COUNT(CASE WHEN failed_subjects > 0 THEN 1 END) AS failed_students,
        COALESCE(ROUND(100.0 * COUNT(CASE WHEN failed_subjects = 0 AND total_subjects > 0 THEN 1 END) /
          NULLIF(COUNT(regn_numb), 0), 2), 0) AS pass_percentage,
+       COALESCE(ROUND(100.0 * COUNT(CASE WHEN failed_subjects > 0 THEN 1 END) /
+         NULLIF(COUNT(regn_numb), 0), 2), 0) AS fail_percentage,
        COALESCE(ROUND(100.0 * COUNT(CASE WHEN failed_subjects = 0 AND total_subjects > 0 THEN 1 END) /
          NULLIF(COUNT(regn_numb), 0), 2), 0) AS mode_pass_percentage,
        COALESCE(ROUND(100.0 * COUNT(CASE WHEN failed_subjects > 0 THEN 1 END) /
          NULLIF(COUNT(regn_numb), 0), 2), 0) AS mode_fail_percentage
      FROM student_mode_eval
-     GROUP BY type_code, mode_name
-     ORDER BY type_code`,
+     GROUP BY mode
+     ORDER BY mode DESC`,
     values
   );
   return result.rows;

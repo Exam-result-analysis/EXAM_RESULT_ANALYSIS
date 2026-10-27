@@ -491,9 +491,20 @@ async function inspectExcelFile(fileBuffer, options = {}) {
     const typeCode = String(row.TYPE || row.type_code || row.typeCode || 'CT').trim().toUpperCase();
     examTypesSet.add(typeCode);
 
-    const subjCode = parseInt(row.SUBJCODE || row.subject_code || row.subject_id || 50011, 10);
-    const subjUncode = String(row.SUBJUNCD || row.subject_uncode || (subjCode === 50011 ? 'DBA5101' : `SUB${subjCode}`)).trim();
-    const subjName = row.SUBJNAME || row.subject_name || row.subjectName || `Subject ${subjCode}`;
+    const rawUncode = row.SUBJUNCD || row.subject_uncode || row.COURSE_CODE || row['Course Code'] || row['Course code'] || row.COURSE || row.Course || row.SUBJ_CODE;
+    let subjUncode = rawUncode ? String(rawUncode).trim() : '';
+    if (!subjUncode && typeof row.SUBJCODE === 'string' && isNaN(Number(row.SUBJCODE))) {
+      subjUncode = row.SUBJCODE.trim();
+    }
+    const rawSubjCode = row.SUBJCODE || row.subject_code || row.subject_id;
+    const parsedSubjCode = parseInt(rawSubjCode, 10);
+    const hasValidSubjCode = !isNaN(parsedSubjCode) && parsedSubjCode > 0;
+    const subjCode = hasValidSubjCode ? parsedSubjCode : 50011;
+    if (!subjUncode) {
+      subjUncode = hasValidSubjCode ? `SUB${parsedSubjCode}` : 'SUB50011';
+    }
+    const subjKey = subjUncode.toUpperCase();
+    const subjName = row.SUBJNAME || row.subject_name || row.subjectName || row['Course Name'] || `Subject ${subjUncode}`;
 
     // Normalize status
     const rawStatus = String(row.RES_STAT || row.status_code || row.result_status || '').trim().toUpperCase();
@@ -551,9 +562,9 @@ async function inspectExcelFile(fileBuffer, options = {}) {
     const grade = row.GRADE || row.grade || calculateGrade(total);
 
     // Track subject-level metrics
-    if (!subjectsMap.has(subjCode)) {
-      subjectsMap.set(subjCode, {
-        subject_code: subjCode,
+    if (!subjectsMap.has(subjKey)) {
+      subjectsMap.set(subjKey, {
+        subject_code: hasValidSubjCode ? parsedSubjCode : subjKey,
         subject_uncode: subjUncode,
         subject_name: subjName,
         total_appeared: 0,
@@ -567,7 +578,7 @@ async function inspectExcelFile(fileBuffer, options = {}) {
       });
     }
 
-    const subjStat = subjectsMap.get(subjCode);
+    const subjStat = subjectsMap.get(subjKey);
     subjStat.total_appeared++;
     if (status === 'PASS') subjStat.passed++;
     else if (status === 'FAIL') subjStat.failed++;

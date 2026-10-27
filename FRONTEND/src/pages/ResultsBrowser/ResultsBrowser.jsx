@@ -83,6 +83,23 @@ export default function ResultsBrowser() {
     }
   }
 
+  const handleClearAll = async () => {
+    if (
+      !window.confirm(
+        'Are you sure you want to delete ALL records from the database?\n\nThis will remove all stored exam results and student records. This cannot be undone.'
+      )
+    ) {
+      return
+    }
+    try {
+      await dataInputService.clearAllResults()
+      setMsg({ type: 'success', text: 'All exam results and student records deleted successfully.' })
+      loadResults()
+    } catch (err) {
+      setMsg({ type: 'error', text: err.message || 'Failed to clear database.' })
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -94,9 +111,14 @@ export default function ResultsBrowser() {
             Browse, search, and manage exam result records stored in the database.
           </p>
         </div>
-        <Button variant="secondary" size="sm" onClick={loadResults} disabled={loading}>
-          🔄 Refresh
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button variant="danger" size="sm" onClick={handleClearAll} disabled={loading}>
+            🗑️ Delete All Records
+          </Button>
+          <Button variant="secondary" size="sm" onClick={loadResults} disabled={loading}>
+            🔄 Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Status messages */}

@@ -13,7 +13,23 @@ async function ingestRawData(rawRows = []) {
   }
 
   // Pre-load existing lookup keys into memory Sets to avoid thousands of round-trips
-  const existingSubjects = new Set(query('SELECT subject_code FROM subjects').rows.map(r => r.subject_code));
+  const dbSubjects = query('SELECT subject_code, subject_uncode FROM subjects').rows;
+  const uncodeToCodeMap = new Map();
+  const codeToUncodeMap = new Map();
+  const usedSubjectCodes = new Set();
+  let maxSubjectCode = 50000;
+
+  for (const s of dbSubjects) {
+    if (s.subject_uncode) {
+      uncodeToCodeMap.set(String(s.subject_uncode).trim().toUpperCase(), s.subject_code);
+    }
+    codeToUncodeMap.set(s.subject_code, s.subject_uncode);
+    usedSubjectCodes.add(s.subject_code);
+    const numCode = Number(s.subject_code);
+    if (!isNaN(numCode) && numCode > maxSubjectCode) {
+      maxSubjectCode = numCode;
+    }
+  }
   const existingUniversities = new Set(query('SELECT university_code FROM universities').rows.map(r => r.university_code));
   const existingDegrees = new Set(query('SELECT degree_code FROM degrees').rows.map(r => r.degree_code));
   const existingStudents = new Set(query('SELECT regn_numb FROM students').rows.map(r => r.regn_numb));
@@ -103,16 +119,42 @@ async function ingestRawData(rawRows = []) {
       }
 
       // 3. Ensure Subject
-      const subjCode = parseInt(row.SUBJCODE || row.subject_code || 50011, 10);
-      const subjUncode = String(row.SUBJUNCD || row.subject_uncode || (subjCode === 50011 ? 'DBA5101' : `SUB${subjCode}`)).trim();
-      const subjName = row.subject_name || row.SUBJNAME || `Subject ${subjCode}`;
+      const rawUncode = row.SUBJUNCD || row.subject_uncode || row.COURSE_CODE || row['Course Code'] || row['Course code'] || row.COURSE || row.Course || row.SUBJ_CODE;
+      let subjUncode = rawUncode ? String(rawUncode).trim() : '';
+      if (!subjUncode && typeof row.SUBJCODE === 'string' && isNaN(Number(row.SUBJCODE))) {
+        subjUncode = row.SUBJCODE.trim();
+      }
 
-      if (!existingSubjects.has(subjCode)) {
+      const rawSubjCode = row.SUBJCODE || row.subject_code || row.subject_id;
+      const parsedSubjCode = parseInt(rawSubjCode, 10);
+      const hasValidSubjCode = !isNaN(parsedSubjCode) && parsedSubjCode > 0;
+
+      if (!subjUncode) {
+        subjUncode = hasValidSubjCode ? `SUB${parsedSubjCode}` : 'SUB50011';
+      }
+
+      const normUncode = subjUncode.toUpperCase();
+      let resolvedSubjCode;
+
+      if (uncodeToCodeMap.has(normUncode)) {
+        resolvedSubjCode = uncodeToCodeMap.get(normUncode);
+      } else if (hasValidSubjCode && !usedSubjectCodes.has(parsedSubjCode)) {
+        resolvedSubjCode = parsedSubjCode;
+      } else {
+        maxSubjectCode++;
+        resolvedSubjCode = maxSubjectCode;
+      }
+
+      const subjName = row.subject_name || row.SUBJNAME || row['Course Name'] || `Subject ${subjUncode}`;
+
+      if (!usedSubjectCodes.has(resolvedSubjCode)) {
         await query(
           'INSERT OR IGNORE INTO subjects (subject_code, subject_uncode, subject_name) VALUES (?, ?, ?)',
-          [subjCode, subjUncode, subjName]
+          [resolvedSubjCode, subjUncode, subjName]
         );
-        existingSubjects.add(subjCode);
+        usedSubjectCodes.add(resolvedSubjCode);
+        uncodeToCodeMap.set(normUncode, resolvedSubjCode);
+        codeToUncodeMap.set(resolvedSubjCode, subjUncode);
       }
 
       // 4. Ensure University & Degree
@@ -122,9 +164,12 @@ async function ingestRawData(rawRows = []) {
       }
 
       if (!existingDegrees.has(degreeCode)) {
+        const isOnline = String(row.DELIVERY_MODE || '').trim().toUpperCase() === 'ONLINE' ||
+                         subjUncode.toUpperCase().startsWith('O');
+        const deliveryMode = isOnline ? 'ONLINE' : 'OFFLINE';
         await query(
-          'INSERT OR IGNORE INTO degrees (degree_code, degree_name, university_code) VALUES (?, ?, ?)',
-          [degreeCode, `Degree Program ${degreeCode}`, uniCode]
+          'INSERT OR IGNORE INTO degrees (degree_code, degree_name, delivery_mode, university_code) VALUES (?, ?, ?, ?)',
+          [degreeCode, `Degree Program ${degreeCode}`, deliveryMode, uniCode]
         );
         existingDegrees.add(degreeCode);
       }
@@ -178,7 +223,7 @@ async function ingestRawData(rawRows = []) {
            status_code = excluded.status_code,
            system_code = excluded.system_code,
            created_at = CURRENT_TIMESTAMP`,
-        [regnNumb, subjCode, degreeCode, currSems, internal, external, total, grade, typeCode, normalizedStatus, systemCode]
+        [regnNumb, resolvedSubjCode, degreeCode, currSems, internal, external, total, grade, typeCode, normalizedStatus, systemCode]
       );
 
       insertedCount++;
