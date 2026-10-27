@@ -2,6 +2,29 @@
 const { db, query } = require('../config/database');
 const ApiError = require('../utils/apiError');
 
+function getField(row, ...candidates) {
+  if (!row || typeof row !== 'object') return undefined;
+
+  for (const c of candidates) {
+    if (row[c] !== undefined && row[c] !== null && String(row[c]).trim() !== '') {
+      return row[c];
+    }
+  }
+
+  const rowEntries = Object.entries(row);
+  for (const c of candidates) {
+    const cleanCandidate = String(c).toLowerCase().replace(/[^a-z0-9]/g, '');
+    for (const [key, val] of rowEntries) {
+      const cleanKey = String(key).toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cleanKey === cleanCandidate && val !== undefined && val !== null && String(val).trim() !== '') {
+        return val;
+      }
+    }
+  }
+
+  return undefined;
+}
+
 /**
  * Ingest and sanitize raw exam results for the 3NF schema
  */
@@ -43,33 +66,51 @@ async function ingestRawData(rawRows = []) {
   let failCount = 0;
   let cancelledCount = 0;
 
+  let lastRegnNumb = null;
+  let lastDegreeCode = 501;
+  let lastCurrSems = 1;
+
   db.exec('BEGIN TRANSACTION;');
 
   try {
     for (const row of rows) {
-      const regnNumb = parseInt(
-        row.REGNNUMB || row.regn_numb || row.student_id || row.regnNumb || row.studentId,
-        10
-      );
+      const rawRegn = getField(row, 'REGNNUMB', 'reg_no', 'regno', 'reg no', 'student_id', 'register_number', 'roll_no', 'reg_numb');
+      let regnNumb = rawRegn !== undefined ? parseInt(String(rawRegn).replace(/[^0-9]/g, ''), 10) : NaN;
+
+      if (!isNaN(regnNumb)) {
+        lastRegnNumb = regnNumb;
+      } else if (lastRegnNumb !== null) {
+        const hasSubject = getField(row, 'SUBJCODE', 'subjuncd', 'course_code', 'course', 'sub_code', 'subject_code');
+        if (hasSubject) {
+          regnNumb = lastRegnNumb;
+        }
+      }
+
       if (isNaN(regnNumb)) continue;
 
-      const degreeCode = parseInt(
-        row.DEGRCODE || row.degree_code || row.degreeCode || row.department_id || 501,
-        10
-      );
+      const rawDegr = getField(row, 'DEGRCODE', 'degrcod', 'degree_code', 'degreeCode', 'department_id', 'deg_code');
+      let degreeCode = rawDegr !== undefined ? parseInt(String(rawDegr).replace(/[^0-9]/g, ''), 10) : NaN;
+      if (!isNaN(degreeCode)) {
+        lastDegreeCode = degreeCode;
+      } else {
+        degreeCode = lastDegreeCode;
+      }
 
-      const currSems = parseInt(
-        row.CURRSEMS || row.curr_sems || row.currSems || row.semester || row.semester_number || 1,
-        10
-      );
+      const rawSems = getField(row, 'CURRSEMS', 'currsem', 'curr_sems', 'currSems', 'semester', 'semester_number', 'sem');
+      let currSems = rawSems !== undefined ? parseInt(String(rawSems).replace(/[^0-9]/g, ''), 10) : NaN;
+      if (!isNaN(currSems)) {
+        lastCurrSems = currSems;
+      } else {
+        currSems = lastCurrSems;
+      }
 
-      const typeCode = String(row.TYPE || row.type_code || row.typeCode || row.exam_type || 'CT-OL').trim().toUpperCase();
-      const uniCode = String(row.UNIVERSITY || row.university_code || row.university || 'AUCDE').trim().toUpperCase();
-      const systemCode = String(row.RESULT_SYSTEM || row.RESULT_SY || row.system_code || 'M').trim().toUpperCase();
+      const typeCode = String(getField(row, 'TYPE', 'type_code', 'typeCode', 'exam_type') || 'CT-OL').trim().toUpperCase();
+      const uniCode = String(getField(row, 'UNIVERSITY', 'universit', 'university_code') || 'AUCDE').trim().toUpperCase();
+      const systemCode = String(getField(row, 'RESULT_SYSTEM', 'result_syste', 'result_sy', 'system_code') || 'M').trim().toUpperCase();
 
       // 1. Sanitize Result Status (P -> PASS, F -> FAIL, CAN -> CANCELLED)
       let normalizedStatus = 'PASS';
-      const rawStatus = String(row.RES_STAT || row.status_code || row.result_status || '').trim().toUpperCase();
+      const rawStatus = String(getField(row, 'RES_STAT', 'status_code', 'result_status', 'status') || '').trim().toUpperCase();
       if (rawStatus === 'P' || rawStatus === 'PASS') {
         normalizedStatus = 'PASS';
         passCount++;
@@ -89,7 +130,7 @@ async function ingestRawData(rawRows = []) {
       let external = null;
       let total = null;
 
-      const rawInternal = row.INTNMARK ?? row.internal_marks ?? row.internal_mark ?? row.internal;
+      const rawInternal = getField(row, 'INTNMARK', 'internal_marks', 'internal_mark', 'internal');
       const numInternal = Number(rawInternal);
       if (rawInternal !== null && rawInternal !== undefined && rawInternal !== '' && !isNaN(numInternal) && numInternal >= 0 && numInternal !== -1) {
         internal = numInternal;
@@ -97,7 +138,7 @@ async function ingestRawData(rawRows = []) {
         sanitizedNullCount++;
       }
 
-      const rawExternal = row.EXT_MARK ?? row.external_marks ?? row.external_mark ?? row.external;
+      const rawExternal = getField(row, 'EXT_MARK', 'external_marks', 'external_mark', 'external');
       const numExternal = Number(rawExternal);
       if (rawExternal !== null && rawExternal !== undefined && rawExternal !== '' && !isNaN(numExternal) && numExternal >= 0 && numExternal !== -1) {
         external = numExternal;
@@ -105,7 +146,7 @@ async function ingestRawData(rawRows = []) {
         sanitizedNullCount++;
       }
 
-      const rawTotal = row.TOTAL ?? row.total_marks ?? row.total_mark ?? row.total;
+      const rawTotal = getField(row, 'TOTAL', 'total_marks', 'total_mark', 'total');
       const numTotal = Number(rawTotal);
       if (rawTotal !== null && rawTotal !== undefined && rawTotal !== '' && !isNaN(numTotal) && numTotal >= 0 && numTotal !== -1) {
         total = numTotal;
@@ -119,13 +160,13 @@ async function ingestRawData(rawRows = []) {
       }
 
       // 3. Ensure Subject
-      const rawUncode = row.SUBJUNCD || row.subject_uncode || row.COURSE_CODE || row['Course Code'] || row['Course code'] || row.COURSE || row.Course || row.SUBJ_CODE;
+      const rawUncode = getField(row, 'SUBJUNCD', 'subject_uncode', 'COURSE_CODE', 'course_code', 'COURSE', 'course', 'SUBJ_CODE');
       let subjUncode = rawUncode ? String(rawUncode).trim() : '';
-      if (!subjUncode && typeof row.SUBJCODE === 'string' && isNaN(Number(row.SUBJCODE))) {
-        subjUncode = row.SUBJCODE.trim();
+      const rawSubjCode = getField(row, 'SUBJCODE', 'subject_code', 'subject_id', 'subj_code');
+      if (!subjUncode && typeof rawSubjCode === 'string' && isNaN(Number(rawSubjCode))) {
+        subjUncode = rawSubjCode.trim();
       }
 
-      const rawSubjCode = row.SUBJCODE || row.subject_code || row.subject_id;
       const parsedSubjCode = parseInt(rawSubjCode, 10);
       const hasValidSubjCode = !isNaN(parsedSubjCode) && parsedSubjCode > 0;
 

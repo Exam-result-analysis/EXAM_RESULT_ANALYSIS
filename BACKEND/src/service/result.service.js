@@ -19,6 +19,29 @@ function calculateGrade(total) {
   return 'F';
 }
 
+function getField(row, ...candidates) {
+  if (!row || typeof row !== 'object') return undefined;
+
+  for (const c of candidates) {
+    if (row[c] !== undefined && row[c] !== null && String(row[c]).trim() !== '') {
+      return row[c];
+    }
+  }
+
+  const rowEntries = Object.entries(row);
+  for (const c of candidates) {
+    const cleanCandidate = String(c).toLowerCase().replace(/[^a-z0-9]/g, '');
+    for (const [key, val] of rowEntries) {
+      const cleanKey = String(key).toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cleanKey === cleanCandidate && val !== undefined && val !== null && String(val).trim() !== '') {
+        return val;
+      }
+    }
+  }
+
+  return undefined;
+}
+
 /**
  * List results with optional filtering and pagination
  */
@@ -471,32 +494,57 @@ async function inspectExcelFile(fileBuffer, options = {}) {
   const sanitizedRows = [];
   const previewRows = [];
 
+  let lastRegnNumb = null;
+  let lastDegreeCode = 501;
+  let lastCurrSems = 1;
+
   for (let idx = 0; idx < rawRows.length; idx++) {
     const row = rawRows[idx];
     const rowNumber = idx + 2;
 
-    const rawRegn = row.REGNNUMB || row.regn_numb || row.student_id || row.regnNumb || row.studentId;
-    const regnNumb = parseInt(rawRegn, 10);
+    const rawRegn = getField(row, 'REGNNUMB', 'reg_no', 'regno', 'reg no', 'student_id', 'register_number', 'roll_no', 'reg_numb');
+    let regnNumb = rawRegn !== undefined ? parseInt(String(rawRegn).replace(/[^0-9]/g, ''), 10) : NaN;
 
     if (!isNaN(regnNumb)) {
+      lastRegnNumb = regnNumb;
       studentsSet.add(regnNumb);
+    } else if (lastRegnNumb !== null) {
+      const hasSubject = getField(row, 'SUBJCODE', 'subjuncd', 'course_code', 'course', 'sub_code', 'subject_code');
+      if (hasSubject) {
+        regnNumb = lastRegnNumb;
+        studentsSet.add(regnNumb);
+      }
     }
 
-    const degreeCode = parseInt(row.DEGRCODE || row.degree_code || row.degreeCode || 501, 10);
+    if (isNaN(regnNumb)) continue;
+
+    const rawDegr = getField(row, 'DEGRCODE', 'degrcod', 'degree_code', 'degreeCode', 'department_id', 'deg_code');
+    let degreeCode = rawDegr !== undefined ? parseInt(String(rawDegr).replace(/[^0-9]/g, ''), 10) : NaN;
+    if (!isNaN(degreeCode)) {
+      lastDegreeCode = degreeCode;
+    } else {
+      degreeCode = lastDegreeCode;
+    }
     degreesSet.add(degreeCode);
 
-    const currSems = parseInt(row.CURRSEMS || row.curr_sems || row.currSems || row.semester || 1, 10);
+    const rawSems = getField(row, 'CURRSEMS', 'currsem', 'curr_sems', 'currSems', 'semester', 'semester_number', 'sem');
+    let currSems = rawSems !== undefined ? parseInt(String(rawSems).replace(/[^0-9]/g, ''), 10) : NaN;
+    if (!isNaN(currSems)) {
+      lastCurrSems = currSems;
+    } else {
+      currSems = lastCurrSems;
+    }
     semestersSet.add(currSems);
 
-    const typeCode = String(row.TYPE || row.type_code || row.typeCode || 'CT').trim().toUpperCase();
+    const typeCode = String(getField(row, 'TYPE', 'type_code', 'typeCode', 'exam_type') || 'CT').trim().toUpperCase();
     examTypesSet.add(typeCode);
 
-    const rawUncode = row.SUBJUNCD || row.subject_uncode || row.COURSE_CODE || row['Course Code'] || row['Course code'] || row.COURSE || row.Course || row.SUBJ_CODE;
+    const rawUncode = getField(row, 'SUBJUNCD', 'subject_uncode', 'COURSE_CODE', 'course_code', 'COURSE', 'course', 'SUBJ_CODE');
     let subjUncode = rawUncode ? String(rawUncode).trim() : '';
-    if (!subjUncode && typeof row.SUBJCODE === 'string' && isNaN(Number(row.SUBJCODE))) {
-      subjUncode = row.SUBJCODE.trim();
+    const rawSubjCode = getField(row, 'SUBJCODE', 'subject_code', 'subject_id', 'subj_code');
+    if (!subjUncode && typeof rawSubjCode === 'string' && isNaN(Number(rawSubjCode))) {
+      subjUncode = rawSubjCode.trim();
     }
-    const rawSubjCode = row.SUBJCODE || row.subject_code || row.subject_id;
     const parsedSubjCode = parseInt(rawSubjCode, 10);
     const hasValidSubjCode = !isNaN(parsedSubjCode) && parsedSubjCode > 0;
     const subjCode = hasValidSubjCode ? parsedSubjCode : 50011;
@@ -507,7 +555,7 @@ async function inspectExcelFile(fileBuffer, options = {}) {
     const subjName = row.SUBJNAME || row.subject_name || row.subjectName || row['Course Name'] || `Subject ${subjUncode}`;
 
     // Normalize status
-    const rawStatus = String(row.RES_STAT || row.status_code || row.result_status || '').trim().toUpperCase();
+    const rawStatus = String(getField(row, 'RES_STAT', 'status_code', 'result_status', 'status') || '').trim().toUpperCase();
     let status = 'PASS';
     if (rawStatus === 'F' || rawStatus === 'FAIL') {
       status = 'FAIL';
@@ -522,7 +570,7 @@ async function inspectExcelFile(fileBuffer, options = {}) {
 
     // Sanitize marks (-1 becomes null)
     let internal = null;
-    const rawInt = row.INTNMARK ?? row.internal_marks ?? row.internal_mark;
+    const rawInt = getField(row, 'INTNMARK', 'internal_marks', 'internal_mark', 'internal');
     const numInt = Number(rawInt);
     if (rawInt !== null && rawInt !== undefined && rawInt !== '' && !isNaN(numInt) && numInt >= 0 && numInt !== -1) {
       internal = numInt;
@@ -533,7 +581,7 @@ async function inspectExcelFile(fileBuffer, options = {}) {
     }
 
     let external = null;
-    const rawExt = row.EXT_MARK ?? row.external_marks ?? row.external_mark;
+    const rawExt = getField(row, 'EXT_MARK', 'external_marks', 'external_mark', 'external');
     const numExt = Number(rawExt);
     if (rawExt !== null && rawExt !== undefined && rawExt !== '' && !isNaN(numExt) && numExt >= 0 && numExt !== -1) {
       external = numExt;
@@ -544,7 +592,7 @@ async function inspectExcelFile(fileBuffer, options = {}) {
     }
 
     let total = null;
-    const rawTot = row.TOTAL ?? row.total_marks ?? row.total_mark;
+    const rawTot = getField(row, 'TOTAL', 'total_marks', 'total_mark', 'total');
     const numTot = Number(rawTot);
     if (rawTot !== null && rawTot !== undefined && rawTot !== '' && !isNaN(numTot) && numTot >= 0 && numTot !== -1) {
       total = numTot;
@@ -559,7 +607,7 @@ async function inspectExcelFile(fileBuffer, options = {}) {
       if (total < lowestTotal) lowestTotal = total;
     }
 
-    const grade = row.GRADE || row.grade || calculateGrade(total);
+    const grade = getField(row, 'GRADE', 'grade') || calculateGrade(total);
 
     // Track subject-level metrics
     if (!subjectsMap.has(subjKey)) {
@@ -605,8 +653,8 @@ async function inspectExcelFile(fileBuffer, options = {}) {
       grade,
       status_code: status,
       type_code: typeCode,
-      university: row.UNIVERSITY || 'AUC',
-      result_system: row.RESULT_SYSTEM || 'M',
+      university: getField(row, 'UNIVERSITY', 'universit', 'university_code') || 'AUC',
+      result_system: getField(row, 'RESULT_SYSTEM', 'result_syste', 'result_sy', 'system_code') || 'M',
     };
 
     sanitizedRows.push(sanitizedRow);
