@@ -5,7 +5,6 @@ services:
     build:
       context: .
       dockerfile: BACKEND/Dockerfile
-    container_name: exam_result_analysis_app
     restart: unless-stopped
     ports:
       - "9090:5000"
